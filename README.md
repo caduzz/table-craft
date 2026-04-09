@@ -1,83 +1,99 @@
-# Future Mod
+# Nome do Mod
 
-Future Mod is a personal Minecraft mod project I developed in my free time to revisit and practice Java. The goal was not to build something massive, but to challenge myself by working directly with Minecraft’s modding ecosystem and understanding how everything connects under the hood.
-
-## Motivation
-
-I started this project mainly to:
-
-- Refresh my Java knowledge  
-- Explore NeoForge modding  
-- Understand how Minecraft systems (items, armor, tools, events, world generation, etc.) actually work  
-- Push myself to solve real-world coding issues instead of just following tutorials  
-
-One thing I quickly noticed:  
-Minecraft modding relies heavily on JSON for almost everything — recipes, loot tables, world generation, block states, models, and more.
-
-While it was a bit frustrating at first (there is a lot of JSON), it also helped me better understand how data-driven systems work and why Minecraft is structured this way.
+> Um mod para Minecraft (NeoForge 1.21) que adiciona vários jogos clássicos jogáveis dentro do mundo — começando com dama e xadrez, e muito mais por vir!
 
 ---
 
-## Features Implemented
+## Imagens
 
-Throughout development, I experimented with:
+### Tabuleiro de Damas
 
-- Custom Armor (with custom materials and attributes)  
-- Custom Tools (Pickaxe, Axe, Hoe, etc.)  
-- Custom Tiers  
-- Attribute Modifiers  
-- Enchantability fixes  
-- Block drop configuration  
-- Ore world generation  
-- Custom Keybind (Zoom with smooth FOV transition)  
-- Fall damage modification (bounce / cancel logic)  
-- Custom movement sound behavior  
-- Equipment-based effects (Fire Resistance, Jump Boost, etc.)
+![Tabuleiro de Damas](images/damas.png)
+
+### Tabuleiro de Xadrez
+
+![Tabuleiro de Xadrez](images/xadrez.png)
+
+### Interface e HUD
+
+![HUD](images/hud.png)
 
 ---
 
-## Challenges Faced
+## Funcionalidades
 
-Some of the main challenges included:
-
-- Understanding NeoForge's event system  
-- Working with `DeferredRegister` and registries  
-- Fixing attribute modifiers not applying properly  
-- Ensuring tools dropped correct blocks (Tier & Tag system)  
-- Making armor non-stackable  
-- Handling client vs server side logic  
-- Implementing smooth zoom without FPS dependency  
-- Dealing with API changes between Minecraft versions  
-- Fixing compilation errors caused by method signature changes  
-- Understanding how `Holder`, `TagKey<Block>`, and registries work  
-
-And of course, a significant amount of JSON configuration.
+* Tabuleiro de dama totalmente funcional em um único bloco
+* Tabuleiro de xadrez com peças 3D
+* Interação direta no mundo (sem menus externos)
+* Destaque de movimentos possíveis
+* Sistema de seleção de peças com HUD
+* Reset automático ao fim da partida
+* Orientação dinâmica do tabuleiro baseada no jogador
 
 ---
 
-## What I Learned
+## Como usar
 
-This project helped me:
-
-- Get more comfortable with Java  
-- Improve debugging skills  
-- Understand Minecraft's architecture better  
-- Work with event-driven programming  
-- Deal with version migration issues  
-- Think more structurally about modular code  
+1. Pegue o item do tabuleiro (dama ou xadrez)
+2. Coloque no chão
+3. Interaja com o tabuleiro
+4. Selecione uma peça
+5. Escolha o movimento destacado
 
 ---
 
-## Project Status
+## Requisitos
 
-This is an experimental learning project.  
-It is not meant to be a polished public release — it is a sandbox for experimenting and improving my understanding of Java and Minecraft modding.
+* Minecraft 1.21
+* NeoForge
 
 ---
 
-## Tech Stack
+## Instalação
 
-- Java  
-- NeoForge  
-- Minecraft Modding API  
-- Gradle  
+1. Instale o NeoForge
+2. Coloque o arquivo `.jar` do mod na pasta `mods`
+3. Inicie o jogo
+
+---
+
+## Planejamento futuro
+
+* Novos jogos (cartas, sudoku, etc.)
+* IA para jogar contra o jogador
+* Multiplayer melhorado
+* Mais animações e efeitos visuais
+
+---
+
+## Estrutura de imagens
+
+Coloque suas imagens nesta pasta:
+
+```
+/images
+  damas.png
+  xadrez.png
+  hud.png
+```
+
+---
+
+## Notas
+
+* As peças são renderizadas em 3D com foco em performance
+* O sistema foi otimizado para evitar uso excessivo de CPU/GPU
+
+---
+
+## Licença
+
+Defina aqui sua licença (MIT, GPL, etc.)
+
+---
+
+## Autor
+
+Seu nome aqui
+
+---
