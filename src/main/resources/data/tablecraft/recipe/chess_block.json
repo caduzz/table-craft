@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "key": {
+    "P": {
+      "tag": "minecraft:planks"
+    },
+    "Q": {
+      "item": "minecraft:quartz"
+    }
+  },
+  "pattern": [
+    "PPP",
+    "PQP",
+    "PPP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "tablecraft:chess_block"
+  }
+}

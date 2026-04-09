@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "tablecraft:block/chess_block", "y": 180 },
+    "facing=south": { "model": "tablecraft:block/chess_block" },
+    "facing=west": { "model": "tablecraft:block/chess_block", "y": 270 },
+    "facing=east": { "model": "tablecraft:block/chess_block", "y": 90 }
+  }
+}

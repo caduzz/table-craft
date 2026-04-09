@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "enum": "net/minecraft/world/item/Rarity",
+      "name": "TABLECRAFT_RED",
+      "constructor": "(ILjava/lang/String;Ljava/util/function/UnaryOperator;)V",
+      "parameters": {
+        "class": "net/caduzz/tablecraft/ModEnumParams",
+        "field": "RED_RARITY_PROXY"
+      }
+    }
+  ]
+}

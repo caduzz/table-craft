@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "tablecraft:block/checkers_block", "y": 180 },
+    "facing=south": { "model": "tablecraft:block/checkers_block" },
+    "facing=west": { "model": "tablecraft:block/checkers_block", "y": 270 },
+    "facing=east": { "model": "tablecraft:block/checkers_block", "y": 90 }
+  }
+}

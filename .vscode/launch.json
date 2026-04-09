@@ -1,0 +1,137 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - table-craft",
+        "order": 0
+      },
+      "projectName": "table-craft",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client1",
+      "presentation": {
+        "group": "Mod Development - table-craft",
+        "order": 1
+      },
+      "projectName": "table-craft",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client1RunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client1RunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run\\client1",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client2",
+      "presentation": {
+        "group": "Mod Development - table-craft",
+        "order": 2
+      },
+      "projectName": "table-craft",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client2RunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client2RunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run\\client2",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Data",
+      "presentation": {
+        "group": "Mod Development - table-craft",
+        "order": 3
+      },
+      "projectName": "table-craft",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\dataRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "GameTestServer",
+      "presentation": {
+        "group": "Mod Development - table-craft",
+        "order": 4
+      },
+      "projectName": "table-craft",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\gameTestServerRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\gameTestServerRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - table-craft",
+        "order": 5
+      },
+      "projectName": "table-craft",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}
