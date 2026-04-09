@@ -66,19 +66,6 @@
 
 ---
 
-## Estrutura de imagens
-
-Coloque suas imagens nesta pasta:
-
-```
-/images
-  damas.png
-  xadrez.png
-  hud.png
-```
-
----
-
 ## Notas
 
 * As peças são renderizadas em 3D com foco em performance
