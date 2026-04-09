@@ -16,7 +16,7 @@
 
 ### Interface e HUD
 
-![HUD](images/https://imgur.com/4qh3cyQ.png)
+![HUD](https://imgur.com/4qh3cyQ.png)
 
 ---
 
