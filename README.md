@@ -8,15 +8,15 @@
 
 ### Tabuleiro de Damas
 
-![Tabuleiro de Damas](images/damas.png)
+![Tabuleiro de Damas](https://imgur.com/8ZPpMtp)
 
 ### Tabuleiro de Xadrez
 
-![Tabuleiro de Xadrez](images/xadrez.png)
+![Tabuleiro de Xadrez](https://imgur.com/eAGQqHS)
 
 ### Interface e HUD
 
-![HUD](images/hud.png)
+![HUD](images/https://imgur.com/4qh3cyQ)
 
 ---
 
