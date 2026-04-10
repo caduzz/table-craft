@@ -66,7 +66,17 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         VertexConsumer translucent = buffer.getBuffer(RenderType.entityTranslucent(WHITE_TEX));
         for (int i = 0; i < be.getValidMoveCount(); i++) {
             int packed = be.getValidMovePacked(i);
-            drawValidCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+            if (!isPackedInCaptureMoves(be, packed)) {
+                drawValidCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+            }
+        }
+        for (int i = 0; i < be.getCaptureMoveCount(); i++) {
+            int packed = be.getCaptureMovePacked(i);
+            drawCaptureCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+        }
+        for (int i = 0; i < be.getBlockedByCheckMoveCount(); i++) {
+            int packed = be.getBlockedByCheckMovePacked(i);
+            drawBlockedByCheckOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
         }
 
         /*
@@ -352,6 +362,41 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         vertexT(consumer, mat, pose, light, 90, 170, 255, 90, maxX, y, minZ, 0, 1, 0);
         vertexT(consumer, mat, pose, light, 90, 170, 255, 90, maxX, y, maxZ, 0, 1, 0);
         vertexT(consumer, mat, pose, light, 90, 170, 255, 90, minX, y, maxZ, 0, 1, 0);
+    }
+
+    private static void drawBlockedByCheckOverlay(PoseStack.Pose pose, VertexConsumer consumer, int row, int col, int light) {
+        float minX = col * CELL + CELL_INSET;
+        float maxX = (col + 1) * CELL - CELL_INSET;
+        float minZ = row * CELL + CELL_INSET;
+        float maxZ = (row + 1) * CELL - CELL_INSET;
+        Matrix4f mat = pose.pose();
+        float y = OVERLAY_Y + 0.0003f;
+        vertexT(consumer, mat, pose, light, 255, 220, 60, 120, minX, y, minZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 255, 220, 60, 120, maxX, y, minZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 255, 220, 60, 120, maxX, y, maxZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 255, 220, 60, 120, minX, y, maxZ, 0, 1, 0);
+    }
+
+    private static void drawCaptureCellOverlay(PoseStack.Pose pose, VertexConsumer consumer, int row, int col, int light) {
+        float minX = col * CELL + CELL_INSET;
+        float maxX = (col + 1) * CELL - CELL_INSET;
+        float minZ = row * CELL + CELL_INSET;
+        float maxZ = (row + 1) * CELL - CELL_INSET;
+        Matrix4f mat = pose.pose();
+        float y = OVERLAY_Y + 0.0002f;
+        vertexT(consumer, mat, pose, light, 255, 60, 60, 130, minX, y, minZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 255, 60, 60, 130, maxX, y, minZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 255, 60, 60, 130, maxX, y, maxZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 255, 60, 60, 130, minX, y, maxZ, 0, 1, 0);
+    }
+
+    private static boolean isPackedInCaptureMoves(ChessBlockEntity be, int packed) {
+        for (int i = 0; i < be.getCaptureMoveCount(); i++) {
+            if (be.getCaptureMovePacked(i) == packed) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void drawBox(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cy, float cz, float halfW, float halfH, int cr,

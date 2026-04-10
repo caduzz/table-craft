@@ -58,6 +58,10 @@ public class ChessBlockEntity extends BlockEntity {
     private int selCol = -1;
     private int validMoveCount;
     private final int[] validMovesBuf = new int[64];
+    private int captureMoveCount;
+    private final int[] captureMovesBuf = new int[64];
+    private int blockedByCheckMoveCount;
+    private final int[] blockedByCheckMovesBuf = new int[64];
     private ChessGameStatus gameStatus = ChessGameStatus.PLAYING;
     private long resetAtGameTime = -1L;
     private UUID gameSeatWhiteUuid;
@@ -258,16 +262,16 @@ public class ChessBlockEntity extends BlockEntity {
         board[tr][tc] = placed;
         clearAnimation();
 
-        boolean whiteKingAlive = ChessMoveLogic.hasKing(board, true);
-        boolean blackKingAlive = ChessMoveLogic.hasKing(board, false);
-        if (!whiteKingAlive) {
-            endGame(ChessGameStatus.BLACK_WIN);
-        } else if (!blackKingAlive) {
-            endGame(ChessGameStatus.WHITE_WIN);
-        } else {
-            whiteTurn = !whiteTurn;
-            if (!ChessMoveLogic.currentPlayerHasAnyMove(board, whiteTurn)) {
-                endGame(whiteTurn ? ChessGameStatus.BLACK_WIN : ChessGameStatus.WHITE_WIN);
+        whiteTurn = !whiteTurn;
+        if (!ChessMoveLogic.currentPlayerHasAnyMove(board, whiteTurn)) {
+            boolean sideInCheck = ChessMoveLogic.isKingInCheck(board, whiteTurn);
+            if (sideInCheck) {
+                endGame(whiteTurn ? ChessGameStatus.BLACK_WIN : ChessGameStatus.WHITE_WIN,
+                        Component.literal(whiteTurn ? "Xeque-mate! Pretas venceram no xadrez." : "Xeque-mate! Brancas venceram no xadrez."));
+            } else {
+                // Sem jogadas legais e sem xeque: empate por afogamento.
+                endGame(whiteTurn ? ChessGameStatus.BLACK_WIN : ChessGameStatus.WHITE_WIN,
+                        Component.literal("Sem jogadas legais (afogamento)."));
             }
         }
         setChanged();
@@ -414,12 +418,24 @@ public class ChessBlockEntity extends BlockEntity {
 
     private void recomputeValidMoves() {
         validMoveCount = 0;
+        captureMoveCount = 0;
+        blockedByCheckMoveCount = 0;
         if (!hasSelection() || gameStatus != ChessGameStatus.PLAYING) {
             return;
         }
         ChessMoveLogic.collectLegalMovesForPiece(board, selRow, selCol, whiteTurn, packed -> {
             if (validMoveCount < validMovesBuf.length) {
                 validMovesBuf[validMoveCount++] = packed;
+                int tr = packed / 8;
+                int tc = packed % 8;
+                if (board[tr][tc] != Piece.EMPTY && captureMoveCount < captureMovesBuf.length) {
+                    captureMovesBuf[captureMoveCount++] = packed;
+                }
+            }
+        });
+        ChessMoveLogic.collectBlockedByCheckMovesForPiece(board, selRow, selCol, whiteTurn, packed -> {
+            if (blockedByCheckMoveCount < blockedByCheckMovesBuf.length) {
+                blockedByCheckMovesBuf[blockedByCheckMoveCount++] = packed;
             }
         });
     }
@@ -428,6 +444,8 @@ public class ChessBlockEntity extends BlockEntity {
         selRow = -1;
         selCol = -1;
         validMoveCount = 0;
+        captureMoveCount = 0;
+        blockedByCheckMoveCount = 0;
     }
 
     private void syncToClients() {
@@ -465,6 +483,28 @@ public class ChessBlockEntity extends BlockEntity {
             return 0;
         }
         return validMovesBuf[index];
+    }
+
+    public int getCaptureMoveCount() {
+        return captureMoveCount;
+    }
+
+    public int getCaptureMovePacked(int index) {
+        if (index < 0 || index >= captureMoveCount) {
+            return 0;
+        }
+        return captureMovesBuf[index];
+    }
+
+    public int getBlockedByCheckMoveCount() {
+        return blockedByCheckMoveCount;
+    }
+
+    public int getBlockedByCheckMovePacked(int index) {
+        if (index < 0 || index >= blockedByCheckMoveCount) {
+            return 0;
+        }
+        return blockedByCheckMovesBuf[index];
     }
 
     public boolean isGameInProgress() {
@@ -587,6 +627,10 @@ public class ChessBlockEntity extends BlockEntity {
         tag.putInt("SelCol", selCol);
         tag.putInt("ValidMoveCount", validMoveCount);
         tag.putIntArray("ValidMoves", Arrays.copyOf(validMovesBuf, validMoveCount));
+        tag.putInt("CaptureMoveCount", captureMoveCount);
+        tag.putIntArray("CaptureMoves", Arrays.copyOf(captureMovesBuf, captureMoveCount));
+        tag.putInt("BlockedByCheckMoveCount", blockedByCheckMoveCount);
+        tag.putIntArray("BlockedByCheckMoves", Arrays.copyOf(blockedByCheckMovesBuf, blockedByCheckMoveCount));
         tag.putInt("GameStatus", gameStatus.ordinal());
         tag.putLong("ResetAtGameTime", resetAtGameTime);
         if (gameSeatWhiteUuid != null) {
@@ -629,6 +673,18 @@ public class ChessBlockEntity extends BlockEntity {
         validMoveCount = Math.min(validMoveCount, validMovesBuf.length);
         for (int i = 0; i < validMoveCount; i++) {
             validMovesBuf[i] = vm[i];
+        }
+        int[] cm = tag.getIntArray("CaptureMoves");
+        captureMoveCount = Math.min(tag.contains("CaptureMoveCount") ? tag.getInt("CaptureMoveCount") : cm.length, cm.length);
+        captureMoveCount = Math.min(captureMoveCount, captureMovesBuf.length);
+        for (int i = 0; i < captureMoveCount; i++) {
+            captureMovesBuf[i] = cm[i];
+        }
+        int[] bm = tag.getIntArray("BlockedByCheckMoves");
+        blockedByCheckMoveCount = Math.min(tag.contains("BlockedByCheckMoveCount") ? tag.getInt("BlockedByCheckMoveCount") : bm.length, bm.length);
+        blockedByCheckMoveCount = Math.min(blockedByCheckMoveCount, blockedByCheckMovesBuf.length);
+        for (int i = 0; i < blockedByCheckMoveCount; i++) {
+            blockedByCheckMovesBuf[i] = bm[i];
         }
         if (tag.contains("GameStatus")) {
             int ord = tag.getInt("GameStatus");
