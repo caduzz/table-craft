@@ -10,13 +10,16 @@
 
 ![Tabuleiro de Damas](https://imgur.com/8ZPpMtp.png)
 
-### Tabuleiro de Xadrez
+### Tabuleiro de Xadrez Singleplayer
 
-![Tabuleiro de Xadrez](https://imgur.com/eAGQqHS.png)
+![Tabuleiro de Xadrez](https://imgur.com/qdB8fmB.png)
 
-### Interface e HUD
+### Tabuleiro De Xadrez Multplayer
+![Tabuleiro de Xadrez](https://imgur.com/PvpDLzH.png)
 
-![HUD](https://imgur.com/4qh3cyQ.png)
+### Interface e HUD Multplayer
+
+![HUD](https://imgur.com/mtSYJGO.png)
 
 ---
 
