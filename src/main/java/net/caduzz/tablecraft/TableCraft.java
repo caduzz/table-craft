@@ -6,6 +6,7 @@ import com.mojang.logging.LogUtils;
 
 import net.caduzz.tablecraft.block.ModBlocks;
 import net.caduzz.tablecraft.block.entity.ModBlockEntities;
+import net.caduzz.tablecraft.config.TableCraftConfig;
 import net.caduzz.tablecraft.item.ModCreativeModeTabs;
 import net.caduzz.tablecraft.item.ModItems;
 import net.minecraft.network.chat.Component;
@@ -13,6 +14,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -25,6 +27,7 @@ public class TableCraft {
 
     public TableCraft(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(this::commonSetup);
+        modContainer.registerConfig(ModConfig.Type.COMMON, TableCraftConfig.SPEC, MOD_ID + "-common.toml");
 
         NeoForge.EVENT_BUS.register(this);
 

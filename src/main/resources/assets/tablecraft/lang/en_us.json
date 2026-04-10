@@ -1,5 +1,7 @@
 {
   "block.tablecraft.checkers_block": "Checkers Board",
   "block.tablecraft.chess_block": "Chess Board",
-  "creativetab.tablecraft.games": "TableCraft"
+  "creativetab.tablecraft.games": "TableCraft",
+  "key.categories.tablecraft": "TableCraft",
+  "key.tablecraft.online_menu": "Hint: board menu for online queue"
 }

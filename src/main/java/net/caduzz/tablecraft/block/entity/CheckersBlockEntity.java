@@ -39,7 +39,8 @@ public class CheckersBlockEntity extends BlockEntity {
     public enum CheckersGameStatus {
         PLAYING,
         WHITE_WIN,
-        BLACK_WIN
+        BLACK_WIN,
+        DRAW
     }
 
     public enum Piece {
@@ -174,19 +175,28 @@ public class CheckersBlockEntity extends BlockEntity {
         clearValidMoves();
         if (outcome == CheckersGameStatus.WHITE_WIN) {
             lastWinnerDisplayName = gameSeatWhiteName == null || gameSeatWhiteName.isEmpty() ? "Brancas" : gameSeatWhiteName;
-        } else {
+        } else if (outcome == CheckersGameStatus.BLACK_WIN) {
             lastWinnerDisplayName = gameSeatBlackName == null || gameSeatBlackName.isEmpty() ? "Pretas" : gameSeatBlackName;
+        } else if (outcome == CheckersGameStatus.DRAW) {
+            lastWinnerDisplayName = "Empate";
+        } else {
+            lastWinnerDisplayName = "";
         }
         Component msg = announceOverride != null ? announceOverride
-                : (outcome == CheckersGameStatus.WHITE_WIN
-                        ? Component.literal("Branco venceu!")
-                        : Component.literal("Preto venceu!"));
-        Vec3 center = Vec3.atCenterOf(worldPosition);
-        double reach = 24.0;
-        double reachSq = reach * reach;
-        for (Player p : level.players()) {
-            if (p instanceof ServerPlayer sp && p.distanceToSqr(center) <= reachSq) {
-                sp.sendSystemMessage(msg);
+                : switch (outcome) {
+                    case WHITE_WIN -> Component.literal("Branco venceu!");
+                    case BLACK_WIN -> Component.literal("Preto venceu!");
+                    case DRAW -> Component.literal("Partida empatada.");
+                    default -> Component.empty();
+                };
+        if (!msg.getString().isEmpty()) {
+            Vec3 center = Vec3.atCenterOf(worldPosition);
+            double reach = 24.0;
+            double reachSq = reach * reach;
+            for (Player p : level.players()) {
+                if (p instanceof ServerPlayer sp && p.distanceToSqr(center) <= reachSq) {
+                    sp.sendSystemMessage(msg);
+                }
             }
         }
         setChanged();

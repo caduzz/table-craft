@@ -238,4 +238,29 @@ public final class ChessMoveLogic {
     private static boolean isInside(int r, int c) {
         return r >= 0 && r < 8 && c >= 0 && c < 8;
     }
+
+    /**
+     * Aplica um lance legal no tabuleiro (mutação in-place). Peão na última fila promove a dama.
+     *
+     * @return {@code false} se o lance for ilegal
+     */
+    public static boolean applyLegalMove(Piece[][] board, int fr, int fc, int tr, int tc, boolean whiteTurn) {
+        if (!isLegalMove(board, fr, fc, tr, tc, whiteTurn)) {
+            return false;
+        }
+        Piece moving = board[fr][fc];
+        board[fr][fc] = Piece.EMPTY;
+        board[tr][tc] = promotePawnIfNeeded(moving, tr);
+        return true;
+    }
+
+    private static Piece promotePawnIfNeeded(Piece p, int destRow) {
+        if (p == Piece.WHITE_PAWN && destRow == 0) {
+            return Piece.WHITE_QUEEN;
+        }
+        if (p == Piece.BLACK_PAWN && destRow == 7) {
+            return Piece.BLACK_QUEEN;
+        }
+        return p;
+    }
 }

@@ -40,7 +40,15 @@ public final class ChessVictoryHud {
                 int sw = mc.getWindow().getGuiScaledWidth();
                 int sh = mc.getWindow().getGuiScaledHeight();
                 String name = board.getLastWinnerDisplayName();
-                String sub = board.getGameStatus() == ChessBlockEntity.ChessGameStatus.WHITE_WIN ? "Brancas venceram" : "Pretas venceram";
+                String sub = switch (board.getGameStatus()) {
+                    case WHITE_WIN -> "Brancas venceram";
+                    case BLACK_WIN -> "Pretas venceram";
+                    case DRAW -> "Empate";
+                    default -> "";
+                };
+                if (sub.isEmpty()) {
+                    return;
+                }
                 RenderSystem.enableBlend();
                 gui.fill(0, 0, sw, sh, 0x14000000);
                 gui.drawCenteredString(mc.font, name, sw / 2, (int) (sh * 0.18f), 0xFFFFFF);

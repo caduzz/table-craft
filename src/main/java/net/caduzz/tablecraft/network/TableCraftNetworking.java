@@ -4,6 +4,8 @@ import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.ModBlocks;
 import net.caduzz.tablecraft.block.entity.CheckersBlockEntity;
 import net.caduzz.tablecraft.block.entity.ChessBlockEntity;
+import net.caduzz.tablecraft.online.OnlineSide;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
@@ -26,6 +28,8 @@ public final class TableCraftNetworking {
         reg.playToServer(ChessTableSettingsActionPayload.TYPE, ChessTableSettingsActionPayload.STREAM_CODEC, TableCraftNetworking::handleChessTableAction);
         reg.playToServer(CheckersTableSettingsActionPayload.TYPE, CheckersTableSettingsActionPayload.STREAM_CODEC,
                 TableCraftNetworking::handleCheckersTableAction);
+        reg.playToServer(OnlineTableBindPayload.TYPE, OnlineTableBindPayload.STREAM_CODEC, TableCraftNetworking::handleOnlineBind);
+        reg.playToServer(OnlineTableClearPayload.TYPE, OnlineTableClearPayload.STREAM_CODEC, TableCraftNetworking::handleOnlineClear);
     }
 
     private static void handleChessTableAction(ChessTableSettingsActionPayload payload, IPayloadContext ctx) {
@@ -92,6 +96,62 @@ public final class TableCraftNetworking {
     }
 
     public static void sendCheckersTableAction(CheckersTableSettingsActionPayload payload) {
+        PacketDistributor.sendToServer(payload);
+    }
+
+    private static void handleOnlineBind(OnlineTableBindPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) {
+                return;
+            }
+            if (!player.level().isLoaded(payload.pos())) {
+                return;
+            }
+            if (player.distanceToSqr(Vec3.atCenterOf(payload.pos())) > MAX_ACTION_DISTANCE_SQ) {
+                return;
+            }
+            if (payload.sessionId() == null || payload.sessionId().isEmpty() || payload.matchId() == null || payload.matchId().isEmpty()) {
+                player.displayClientMessage(Component.literal("Sessão ou partida inválida."), true);
+                return;
+            }
+            OnlineSide side = payload.sideOrdinal() == 1 ? OnlineSide.BLACK : OnlineSide.WHITE;
+            if (payload.gameKind() == OnlineTableBindPayload.GAME_CHESS) {
+                if (!player.level().getBlockState(payload.pos()).is(ModBlocks.CHESS_BLOCK.get())) {
+                    return;
+                }
+                BlockEntity be = player.level().getBlockEntity(payload.pos());
+                if (be instanceof ChessBlockEntity chess) {
+                    chess.bindOnlineMatch(player, payload.sessionId(), payload.matchId(), side);
+                }
+            }
+        });
+    }
+
+    private static void handleOnlineClear(OnlineTableClearPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(() -> {
+            if (!(ctx.player() instanceof ServerPlayer player)) {
+                return;
+            }
+            if (!player.level().isLoaded(payload.pos())) {
+                return;
+            }
+            if (player.distanceToSqr(Vec3.atCenterOf(payload.pos())) > MAX_ACTION_DISTANCE_SQ) {
+                return;
+            }
+            if (payload.gameKind() == OnlineTableBindPayload.GAME_CHESS) {
+                BlockEntity be = player.level().getBlockEntity(payload.pos());
+                if (be instanceof ChessBlockEntity chess) {
+                    chess.clearOnlineSession(player);
+                }
+            }
+        });
+    }
+
+    public static void sendOnlineBind(OnlineTableBindPayload payload) {
+        PacketDistributor.sendToServer(payload);
+    }
+
+    public static void sendOnlineClear(OnlineTableClearPayload payload) {
         PacketDistributor.sendToServer(payload);
     }
 }

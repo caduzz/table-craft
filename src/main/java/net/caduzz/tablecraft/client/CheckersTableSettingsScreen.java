@@ -14,15 +14,16 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 
 import javax.annotation.Nullable;
 
-/** Menu da mesa de damas: jogadas possíveis, relógio, reinício (sem último movimento). */
+/** Menu da mesa de damas (jogo local). */
 public class CheckersTableSettingsScreen extends Screen {
-    private static final int PANEL_WIDTH = 240;
+    private static final int PANEL_WIDTH = 260;
     private static final int ROW_H = 22;
     private static final int GAP_Y = 6;
     private static final int SECTION_GAP = 10;
     private static final int BOTTOM_PAD = 12;
     private static final int ARROW_BTN_W = 36;
     private static final int ARROW_GAP = 2;
+    private static final int TITLE_BELOW_TOP = 26;
 
     private final BlockPos boardPos;
     private int panelLeft;
@@ -57,19 +58,10 @@ public class CheckersTableSettingsScreen extends Screen {
         int btnW = PANEL_WIDTH - 20;
         int btnX = panelLeft + 10;
 
-        final int yRel = 26;
-        final int relAfterToggles = yRel + (ROW_H + GAP_Y);
-        final int relTimerHint = relAfterToggles + SECTION_GAP;
-        final int relTimerLabel = relTimerHint + 11;
-        final int relArrows = relTimerLabel + 11 + 6;
-        final int relAfterArrows = relArrows + ROW_H;
-        final int relReset = relAfterArrows + GAP_Y + SECTION_GAP;
-        final int relAfterReset = relReset + ROW_H;
-        final int relDone = relAfterReset + GAP_Y + 10;
-        panelHeight = relDone + ROW_H + BOTTOM_PAD;
+        panelHeight = TITLE_BELOW_TOP + (ROW_H + GAP_Y) * 2 + SECTION_GAP + 11 + 11 + 6 + ROW_H + GAP_Y + SECTION_GAP + ROW_H + GAP_Y + 10 + ROW_H
+                + BOTTOM_PAD;
         panelTop = this.height / 2 - panelHeight / 2;
-
-        int y = panelTop + yRel;
+        int y = panelTop + TITLE_BELOW_TOP;
 
         legalHintsButton = new TableSettingsPanelButton(btnX, y, btnW, ROW_H, Component.empty(),
                 () -> TableCraftNetworking.sendCheckersTableAction(
@@ -108,15 +100,11 @@ public class CheckersTableSettingsScreen extends Screen {
     private void refreshLabelsFromBoard() {
         CheckersBlockEntity checkers = checkersAtPos();
         if (checkers == null) {
-            if (legalHintsButton != null) {
-                legalHintsButton.setMessage(Component.literal("Jogadas possíveis: —"));
-            }
+            legalHintsButton.setMessage(Component.literal("Jogadas possíveis: —"));
             timerLabel = Component.literal("Tempo: —");
             return;
         }
-        if (legalHintsButton != null) {
-            legalHintsButton.setMessage(Component.literal("Jogadas possíveis: " + (checkers.showsLegalMoveHints() ? "Sim" : "Não")));
-        }
+        legalHintsButton.setMessage(Component.literal("Jogadas possíveis: " + (checkers.showsLegalMoveHints() ? "Sim" : "Não")));
         int idx = checkers.getPlayerTimePresetIndex();
         int[] opts = BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS;
         int minutes = idx >= 0 && idx < opts.length ? opts[idx] : opts[0];

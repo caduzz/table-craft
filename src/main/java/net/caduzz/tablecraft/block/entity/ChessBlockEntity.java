@@ -5,7 +5,13 @@ import java.util.UUID;
 import org.joml.Vector2d;
 import net.caduzz.tablecraft.block.ChessBlock;
 import net.caduzz.tablecraft.block.ChessMoveLogic;
+import net.caduzz.tablecraft.config.TableCraftConfig;
 import net.caduzz.tablecraft.game.BoardGameClockConfig;
+import net.caduzz.tablecraft.online.OnlineSide;
+import net.caduzz.tablecraft.online.TablePlayMode;
+import net.caduzz.tablecraft.online.api.ChessApiSnapshot;
+import net.caduzz.tablecraft.online.api.GameApiClient;
+import net.caduzz.tablecraft.online.api.GameApiException;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -16,6 +22,7 @@ import net.minecraft.util.Mth;
 import javax.annotation.Nullable;
 
 import com.mojang.authlib.GameProfile;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -33,7 +40,8 @@ public class ChessBlockEntity extends BlockEntity {
     public enum ChessGameStatus {
         PLAYING,
         WHITE_WIN,
-        BLACK_WIN
+        BLACK_WIN,
+        DRAW
     }
 
     public enum Piece {
@@ -77,6 +85,28 @@ public class ChessBlockEntity extends BlockEntity {
     /** Indicadores de jogadas legais / captura / bloqueio por xeque no tabuleiro. */
     private boolean showLegalMoveHints = true;
 
+    private TablePlayMode tablePlayMode = TablePlayMode.LOCAL;
+    /** Fallback / NBT antigo (uma única sessão). */
+    private String onlineSessionId = "";
+    private String onlineSessionWhite = "";
+    private String onlineSessionBlack = "";
+    private String onlineMatchId = "";
+    private OnlineSide onlineSide = OnlineSide.WHITE;
+    @Nullable
+    private UUID onlineBoundPlayerWhite;
+    @Nullable
+    private UUID onlineBoundPlayerBlack;
+    /** Mundos antigos: um jogador + um lado. */
+    @Nullable
+    private UUID onlineOwnerUuid;
+    private boolean onlineMoveInFlight;
+    private long onlineLastPollTick;
+    private int onlineCapturedWhite;
+    private int onlineCapturedBlack;
+    /** Snapshot da API a aplicar quando a animação online terminar. */
+    @Nullable
+    private ChessApiSnapshot onlinePendingSnapshot;
+
     /** Origem/destino vazios no tabuleiro até o fim da animação; a peça é desenhada só no cliente interpolando. */
     private int animFromRow;
     private int animFromCol;
@@ -104,6 +134,10 @@ public class ChessBlockEntity extends BlockEntity {
         if (level == null) {
             return;
         }
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            serverTickOnline();
+            return;
+        }
         tickGameClock();
         if (hasActiveAnimation()) {
             if (level.getGameTime() >= animStartGameTime + (long) MOVE_DURATION_TICKS) {
@@ -118,16 +152,394 @@ public class ChessBlockEntity extends BlockEntity {
         }
     }
 
+    private void serverTickOnline() {
+        if (hasActiveAnimation() && onlinePendingSnapshot != null && level != null) {
+            if (level.getGameTime() >= animStartGameTime + (long) MOVE_DURATION_TICKS) {
+                finishOnlineAnimatedMove();
+            }
+        } else if (hasActiveAnimation()) {
+            // Animação órfã (ex.: mudança local antes de ligar online): descartar.
+            clearAnimation();
+            setChanged();
+            syncToClients();
+        }
+        tickOnlinePoll();
+        if (gameStatus != ChessGameStatus.PLAYING && resetAtGameTime >= 0L && level.getGameTime() >= resetAtGameTime) {
+            clearOnlineSession(null);
+            resetToStartingPosition();
+            setChanged();
+            syncToClients();
+        }
+    }
+
+    private void tickOnlinePoll() {
+        if (level == null || onlineMatchId.isEmpty()) {
+            return;
+        }
+        // Evita polls que reatribuem resetAtGameTime e adiam o auto-reset indefinidamente.
+        if (gameStatus != ChessGameStatus.PLAYING && resetAtGameTime >= 0L) {
+            return;
+        }
+        String pollSid = pollSessionId();
+        if (pollSid.isEmpty()) {
+            return;
+        }
+        if (onlineMoveInFlight) {
+            return;
+        }
+        if (hasActiveAnimation() && onlinePendingSnapshot != null) {
+            return;
+        }
+        long tick = level.getGameTime();
+        if (tick - onlineLastPollTick < TableCraftConfig.onlinePollTicks()) {
+            return;
+        }
+        onlineLastPollTick = tick;
+        String base = TableCraftConfig.apiBaseUrl();
+        GameApiClient.getChessState(base, pollSid, onlineMatchId).whenComplete((snap, err) -> runOnServer(() -> {
+            if (err != null) {
+                Throwable c = rootCause(err);
+                if (c instanceof GameApiException ge && (ge.httpStatus() == 401 || ge.httpStatus() == 403)) {
+                    clearOnlineSession(null);
+                    setChanged();
+                    syncToClients();
+                }
+                return;
+            }
+            applyChessApiSnapshot(snap);
+            setChanged();
+            syncToClients();
+        }));
+    }
+
+    private void runOnServer(Runnable r) {
+        if (level != null && level.getServer() != null) {
+            level.getServer().execute(r);
+        }
+    }
+
+    private static Throwable rootCause(Throwable t) {
+        Throwable c = t;
+        if (c instanceof java.util.concurrent.CompletionException && c.getCause() != null) {
+            c = c.getCause();
+        }
+        return c;
+    }
+
+    public void bindOnlineMatch(ServerPlayer player, String sessionId, String matchId, OnlineSide side) {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+        String sid = sessionId != null ? sessionId : "";
+        if (tablePlayMode == TablePlayMode.ONLINE && !onlineMatchId.isEmpty() && !onlineMatchId.equals(matchId)) {
+            onlineSessionWhite = "";
+            onlineSessionBlack = "";
+            onlineBoundPlayerWhite = null;
+            onlineBoundPlayerBlack = null;
+            onlineSessionId = "";
+            onlineOwnerUuid = null;
+        }
+        this.onlineMatchId = matchId != null ? matchId : "";
+        this.onlineSide = side;
+        this.onlineOwnerUuid = null;
+        if (side == OnlineSide.WHITE) {
+            this.onlineSessionWhite = sid;
+            this.onlineBoundPlayerWhite = player.getUUID();
+        } else {
+            this.onlineSessionBlack = sid;
+            this.onlineBoundPlayerBlack = player.getUUID();
+        }
+        this.onlineSessionId = coalesceSessions(onlineSessionWhite, onlineSessionBlack, onlineSessionId);
+        this.tablePlayMode = TablePlayMode.ONLINE;
+        this.onlineMoveInFlight = false;
+        this.onlineLastPollTick = level.getGameTime() - TableCraftConfig.onlinePollTicks();
+        clearSelection();
+        clearAnimation();
+        onlinePendingSnapshot = null;
+        String base = TableCraftConfig.apiBaseUrl();
+        String pollSid = pollSessionId();
+        GameApiClient.getChessState(base, pollSid, onlineMatchId).whenComplete((snap, err) -> runOnServer(() -> {
+            if (err == null) {
+                applyChessApiSnapshot(snap);
+            }
+            setChanged();
+            syncToClients();
+        }));
+        player.displayClientMessage(Component.literal("Mesa ligada ao modo online."), false);
+        setChanged();
+        syncToClients();
+    }
+
+    public void clearOnlineSession(@Nullable Player notify) {
+        tablePlayMode = TablePlayMode.LOCAL;
+        onlineSessionId = "";
+        onlineSessionWhite = "";
+        onlineSessionBlack = "";
+        onlineMatchId = "";
+        onlineBoundPlayerWhite = null;
+        onlineBoundPlayerBlack = null;
+        onlineOwnerUuid = null;
+        onlineMoveInFlight = false;
+        onlinePendingSnapshot = null;
+        onlineCapturedWhite = 0;
+        onlineCapturedBlack = 0;
+        if (notify != null) {
+            notify.displayClientMessage(Component.literal("Sessão online encerrada na mesa."), true);
+        }
+        setChanged();
+        syncToClients();
+    }
+
+    private void applyChessApiSnapshot(ChessApiSnapshot s) {
+        if (tablePlayMode == TablePlayMode.ONLINE && tryBeginOnlineMoveAnimation(s)) {
+            return;
+        }
+        applyChessApiSnapshotDirect(s);
+    }
+
+    /**
+     * Inicia a mesma animação que {@link #tryMove} para um lance vindo da API (outro jogador ou confirmação do POST).
+     */
+    private boolean tryBeginOnlineMoveAnimation(ChessApiSnapshot s) {
+        if (level == null || gameStatus != ChessGameStatus.PLAYING) {
+            return false;
+        }
+        if (s.lastFromRow() == null || s.lastFromCol() == null || s.lastToRow() == null || s.lastToCol() == null) {
+            return false;
+        }
+        int fr = s.lastFromRow();
+        int fc = s.lastFromCol();
+        int tr = s.lastToRow();
+        int tc = s.lastToCol();
+        if (hasLastMoveMarker() && fr == lastMoveFromRow && fc == lastMoveFromCol && tr == lastMoveToRow && tc == lastMoveToCol) {
+            return false;
+        }
+        if (hasActiveAnimation()) {
+            return false;
+        }
+        Piece moving = board[fr][fc];
+        if (moving == Piece.EMPTY) {
+            return false;
+        }
+        board[fr][fc] = Piece.EMPTY;
+        board[tr][tc] = Piece.EMPTY;
+        animFromRow = fr;
+        animFromCol = fc;
+        animToRow = tr;
+        animToCol = tc;
+        animPiece = moving;
+        animStartGameTime = level.getGameTime();
+        onlinePendingSnapshot = s;
+        return true;
+    }
+
+    private void finishOnlineAnimatedMove() {
+        ChessApiSnapshot s = onlinePendingSnapshot;
+        onlinePendingSnapshot = null;
+        clearAnimation();
+        if (s != null) {
+            applyChessApiSnapshotDirect(s);
+        }
+        setChanged();
+        syncToClients();
+    }
+
+    private void applyChessApiSnapshotDirect(ChessApiSnapshot s) {
+        Piece[] values = Piece.values();
+        for (int i = 0; i < 64; i++) {
+            int ord = s.boardOrdinals()[i];
+            board[i / 8][i % 8] = ord >= 0 && ord < values.length ? values[ord] : Piece.EMPTY;
+        }
+        whiteTurn = s.whiteTurn();
+        onlineCapturedWhite = s.capturedWhite();
+        onlineCapturedBlack = s.capturedBlack();
+        String key = s.statusKey();
+        if ("WHITE_WIN".equalsIgnoreCase(key)) {
+            if (gameStatus != ChessGameStatus.WHITE_WIN) {
+                gameStatus = ChessGameStatus.WHITE_WIN;
+                resetAtGameTime = level != null ? level.getGameTime() + GAME_END_RESET_DELAY_TICKS : -1L;
+            }
+        } else if ("BLACK_WIN".equalsIgnoreCase(key)) {
+            if (gameStatus != ChessGameStatus.BLACK_WIN) {
+                gameStatus = ChessGameStatus.BLACK_WIN;
+                resetAtGameTime = level != null ? level.getGameTime() + GAME_END_RESET_DELAY_TICKS : -1L;
+            }
+        } else if ("DRAW".equalsIgnoreCase(key)) {
+            if (gameStatus != ChessGameStatus.DRAW) {
+                gameStatus = ChessGameStatus.DRAW;
+                resetAtGameTime = level != null ? level.getGameTime() + GAME_END_RESET_DELAY_TICKS : -1L;
+                lastWinnerDisplayName = "Empate";
+            }
+        } else {
+            gameStatus = ChessGameStatus.PLAYING;
+            resetAtGameTime = -1L;
+        }
+        if (s.lastFromRow() != null && s.lastFromCol() != null && s.lastToRow() != null && s.lastToCol() != null) {
+            setLastMoveMarker(s.lastFromRow(), s.lastFromCol(), s.lastToRow(), s.lastToCol());
+        } else {
+            clearLastMoveMarker();
+        }
+        clearAnimation();
+        // API pode atrasar ou omitir status; alinhar com as regras do mod (xeque-mate / afogamento).
+        maybeFinishChessIfNoLegalMoves();
+    }
+
+    /**
+     * Termina a partida se o lado que joga não tem lances legais (xeque-mate ou afogamento), ou se falta um rei.
+     */
+    private void maybeFinishChessIfNoLegalMoves() {
+        if (gameStatus != ChessGameStatus.PLAYING || level == null) {
+            return;
+        }
+        if (!ChessMoveLogic.hasKing(board, true)) {
+            endGame(ChessGameStatus.BLACK_WIN, Component.literal("Xeque-mate! Pretas venceram no xadrez."));
+            return;
+        }
+        if (!ChessMoveLogic.hasKing(board, false)) {
+            endGame(ChessGameStatus.WHITE_WIN, Component.literal("Xeque-mate! Brancas venceram no xadrez."));
+            return;
+        }
+        if (!ChessMoveLogic.currentPlayerHasAnyMove(board, whiteTurn)) {
+            boolean inCheck = ChessMoveLogic.isKingInCheck(board, whiteTurn);
+            if (inCheck) {
+                endGame(whiteTurn ? ChessGameStatus.BLACK_WIN : ChessGameStatus.WHITE_WIN,
+                        Component.literal(whiteTurn ? "Xeque-mate! Pretas venceram no xadrez." : "Xeque-mate! Brancas venceram no xadrez."));
+            } else {
+                endGame(whiteTurn ? ChessGameStatus.BLACK_WIN : ChessGameStatus.WHITE_WIN,
+                        Component.literal("Sem jogadas legais (afogamento)."));
+            }
+        }
+    }
+
+    private void submitOnlineChessMove(Player player, int fr, int fc, int tr, int tc) {
+        if (level == null || level.isClientSide() || onlineMatchId.isEmpty()) {
+            return;
+        }
+        String moveSid = sessionIdForMove(whiteTurn);
+        if (moveSid.isEmpty()) {
+            player.displayClientMessage(
+                    Component.literal("Online: falta ligar esta mesa com a sessão API do lado que joga (brancas ou pretas)."), true);
+            return;
+        }
+        if (onlineMoveInFlight) {
+            return;
+        }
+        if (!ChessMoveLogic.isLegalMove(board, fr, fc, tr, tc, whiteTurn)) {
+            player.displayClientMessage(Component.literal("Movimento inválido para essa peça."), true);
+            return;
+        }
+        onlineMoveInFlight = true;
+        setChanged();
+        syncToClients();
+        String base = TableCraftConfig.apiBaseUrl();
+        GameApiClient.postChessMove(base, moveSid, onlineMatchId, fr, fc, tr, tc).whenComplete((snap, err) -> runOnServer(() -> {
+            onlineMoveInFlight = false;
+            if (err != null) {
+                Throwable c = rootCause(err);
+                String msg = c.getMessage() != null ? c.getMessage() : c.getClass().getSimpleName();
+                player.displayClientMessage(Component.literal("Online: " + msg), true);
+                if (c instanceof GameApiException ge && (ge.httpStatus() == 401 || ge.httpStatus() == 403)) {
+                    clearOnlineSession(player);
+                }
+                setChanged();
+                syncToClients();
+                return;
+            }
+            applyChessApiSnapshot(snap);
+            clearSelection();
+            player.displayClientMessage(Component.literal("Lance confirmado pela API."), true);
+            setChanged();
+            syncToClients();
+        }));
+    }
+
+    public TablePlayMode getTablePlayMode() {
+        return tablePlayMode;
+    }
+
+    public OnlineSide getOnlineSide() {
+        return onlineSide;
+    }
+
+    /** Lado API deste jogador na mesa, se tiver ligado esta mesa (brancas ou pretas). */
+    @Nullable
+    public OnlineSide getOnlineSideFor(UUID playerId) {
+        if (onlineBoundPlayerWhite != null && onlineBoundPlayerWhite.equals(playerId)) {
+            return OnlineSide.WHITE;
+        }
+        if (onlineBoundPlayerBlack != null && onlineBoundPlayerBlack.equals(playerId)) {
+            return OnlineSide.BLACK;
+        }
+        if (onlineOwnerUuid != null && onlineOwnerUuid.equals(playerId)) {
+            return onlineSide;
+        }
+        return null;
+    }
+
+    private static String coalesceSessions(String a, String b, String legacy) {
+        if (a != null && !a.isEmpty()) {
+            return a;
+        }
+        if (b != null && !b.isEmpty()) {
+            return b;
+        }
+        return legacy != null ? legacy : "";
+    }
+
+    private String pollSessionId() {
+        return coalesceSessions(onlineSessionWhite, onlineSessionBlack, onlineSessionId);
+    }
+
+    private String sessionIdForMove(boolean whiteToMove) {
+        if (whiteToMove) {
+            if (!onlineSessionWhite.isEmpty()) {
+                return onlineSessionWhite;
+            }
+        } else if (!onlineSessionBlack.isEmpty()) {
+            return onlineSessionBlack;
+        }
+        return onlineSessionId;
+    }
+
+    public boolean isOnlineMovePending() {
+        return onlineMoveInFlight;
+    }
+
+    public int getOnlineCapturedWhiteCount() {
+        return onlineCapturedWhite;
+    }
+
+    public int getOnlineCapturedBlackCount() {
+        return onlineCapturedBlack;
+    }
+
     public void resetToStartingPosition() {
         for (Piece[] row : board) {
             Arrays.fill(row, Piece.EMPTY);
         }
-        board[0] = new Piece[] { Piece.BLACK_ROOK, Piece.BLACK_KNIGHT, Piece.BLACK_BISHOP, Piece.BLACK_QUEEN, Piece.BLACK_KING,
-                Piece.BLACK_BISHOP, Piece.BLACK_KNIGHT, Piece.BLACK_ROOK };
+        // Colunas a–h = 0–7. D e E iguais para pretas e brancas; só o rank (linha) muda.
+        final int fileD = 3;
+        final int fileE = 4;
+        final int rankBlack = 0; // rank 8
+        final int rankWhite = 7; // rank 1 (fundo das brancas neste mod)
+        board[rankBlack][0] = Piece.BLACK_ROOK;
+        board[rankBlack][1] = Piece.BLACK_KNIGHT;
+        board[rankBlack][2] = Piece.BLACK_BISHOP;
+        board[rankBlack][fileD] = Piece.BLACK_QUEEN;
+        board[rankBlack][fileE] = Piece.BLACK_KING;
+        board[rankBlack][5] = Piece.BLACK_BISHOP;
+        board[rankBlack][6] = Piece.BLACK_KNIGHT;
+        board[rankBlack][7] = Piece.BLACK_ROOK;
         Arrays.fill(board[1], Piece.BLACK_PAWN);
         Arrays.fill(board[6], Piece.WHITE_PAWN);
-        board[7] = new Piece[] { Piece.WHITE_ROOK, Piece.WHITE_KNIGHT, Piece.WHITE_BISHOP, Piece.WHITE_QUEEN, Piece.WHITE_KING,
-                Piece.WHITE_BISHOP, Piece.WHITE_KNIGHT, Piece.WHITE_ROOK };
+        board[rankWhite][0] = Piece.WHITE_ROOK;
+        board[rankWhite][1] = Piece.WHITE_KNIGHT;
+        board[rankWhite][2] = Piece.WHITE_BISHOP;
+        board[rankWhite][fileD] = Piece.WHITE_QUEEN;
+        board[rankWhite][fileE] = Piece.WHITE_KING;
+        board[rankWhite][5] = Piece.WHITE_BISHOP;
+        board[rankWhite][6] = Piece.WHITE_KNIGHT;
+        board[rankWhite][7] = Piece.WHITE_ROOK;
         whiteTurn = true;
         selRow = -1;
         selCol = -1;
@@ -193,8 +605,18 @@ public class ChessBlockEntity extends BlockEntity {
             player.displayClientMessage(Component.literal("Aguarde o movimento terminar."), true);
             return;
         }
+        if (tablePlayMode == TablePlayMode.ONLINE && onlineMoveInFlight) {
+            player.displayClientMessage(Component.literal("Aguarde a API confirmar o lance…"), true);
+            return;
+        }
         if (!canPlayerControlCurrentTurn(player)) {
-            player.displayClientMessage(Component.literal(whiteTurn ? "Só as brancas jogam agora." : "Só as pretas jogam agora."), true);
+            if (tablePlayMode == TablePlayMode.ONLINE && getOnlineSideFor(player.getUUID()) == null) {
+                player.displayClientMessage(Component.literal(
+                        "Esta mesa está ligada ao online por outros jogadores — «Ligar mesa ao bloco visado» com a sua sessão e lado (API)."),
+                        true);
+            } else {
+                player.displayClientMessage(Component.literal(whiteTurn ? "Só as brancas jogam agora." : "Só as pretas jogam agora."), true);
+            }
             return;
         }
         int[] cell = hitToCell(hit);
@@ -233,6 +655,11 @@ public class ChessBlockEntity extends BlockEntity {
             tryRegisterGameSeat(player);
             setChanged();
             syncToClients();
+            return;
+        }
+
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            submitOnlineChessMove(player, selRow, selCol, row, col);
             return;
         }
 
@@ -299,16 +726,27 @@ public class ChessBlockEntity extends BlockEntity {
         resetAtGameTime = level == null ? -1L : level.getGameTime() + GAME_END_RESET_DELAY_TICKS;
         if (status == ChessGameStatus.WHITE_WIN) {
             lastWinnerDisplayName = gameSeatWhiteName == null || gameSeatWhiteName.isEmpty() ? "Brancas" : gameSeatWhiteName;
-        } else {
+        } else if (status == ChessGameStatus.BLACK_WIN) {
             lastWinnerDisplayName = gameSeatBlackName == null || gameSeatBlackName.isEmpty() ? "Pretas" : gameSeatBlackName;
+        } else if (status == ChessGameStatus.DRAW) {
+            lastWinnerDisplayName = "Empate";
+        } else {
+            lastWinnerDisplayName = "";
         }
         if (level != null) {
             Component msg = announceOverride != null ? announceOverride
-                    : Component.literal(status == ChessGameStatus.WHITE_WIN ? "Brancas venceram no xadrez!" : "Pretas venceram no xadrez!");
-            Vec3 center = Vec3.atCenterOf(worldPosition);
-            for (Player p : level.players()) {
-                if (p.distanceToSqr(center) <= 24.0 * 24.0) {
-                    p.displayClientMessage(msg, false);
+                    : switch (status) {
+                        case WHITE_WIN -> Component.literal("Brancas venceram no xadrez!");
+                        case BLACK_WIN -> Component.literal("Pretas venceram no xadrez!");
+                        case DRAW -> Component.literal("Partida empatada.");
+                        default -> Component.empty();
+                    };
+            if (!msg.getString().isEmpty()) {
+                Vec3 center = Vec3.atCenterOf(worldPosition);
+                for (Player p : level.players()) {
+                    if (p.distanceToSqr(center) <= 24.0 * 24.0) {
+                        p.displayClientMessage(msg, false);
+                    }
                 }
             }
         }
@@ -325,6 +763,25 @@ public class ChessBlockEntity extends BlockEntity {
     }
 
     private boolean canPlayerControlCurrentTurn(Player player) {
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            UUID id = player.getUUID();
+            if (whiteTurn) {
+                if (onlineBoundPlayerWhite != null) {
+                    return id.equals(onlineBoundPlayerWhite);
+                }
+                if (onlineOwnerUuid != null) {
+                    return id.equals(onlineOwnerUuid) && onlineSide == OnlineSide.WHITE;
+                }
+                return false;
+            }
+            if (onlineBoundPlayerBlack != null) {
+                return id.equals(onlineBoundPlayerBlack);
+            }
+            if (onlineOwnerUuid != null) {
+                return id.equals(onlineOwnerUuid) && onlineSide == OnlineSide.BLACK;
+            }
+            return false;
+        }
         UUID id = player.getUUID();
         if (whiteTurn) {
             return gameSeatWhiteUuid == null || gameSeatWhiteUuid.equals(id);
@@ -333,6 +790,9 @@ public class ChessBlockEntity extends BlockEntity {
     }
 
     private void tryRegisterGameSeat(Player player) {
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            return;
+        }
         UUID id = player.getUUID();
         String name = player.getGameProfile().getName();
         if (name == null) {
@@ -413,6 +873,9 @@ public class ChessBlockEntity extends BlockEntity {
         if (hasActiveAnimation()) {
             player.displayClientMessage(Component.literal("Aguarde o movimento terminar para reiniciar."), true);
             return;
+        }
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            clearOnlineSession(player);
         }
         resetToStartingPosition();
         setChanged();
@@ -631,6 +1094,9 @@ public class ChessBlockEntity extends BlockEntity {
         if (playerId == null) {
             return false;
         }
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            return getOnlineSideFor(playerId) != null;
+        }
         return playerId.equals(gameSeatWhiteUuid) || playerId.equals(gameSeatBlackUuid);
     }
 
@@ -729,6 +1195,23 @@ public class ChessBlockEntity extends BlockEntity {
         tag.putIntArray("BlockedByCheckMoves", Arrays.copyOf(blockedByCheckMovesBuf, blockedByCheckMoveCount));
         tag.putInt("GameStatus", gameStatus.ordinal());
         tag.putLong("ResetAtGameTime", resetAtGameTime);
+        tag.putBoolean("OnlineEnabled", tablePlayMode == TablePlayMode.ONLINE);
+        tag.putString("OnlineSessionW", onlineSessionWhite == null ? "" : onlineSessionWhite);
+        tag.putString("OnlineSessionB", onlineSessionBlack == null ? "" : onlineSessionBlack);
+        tag.putString("OnlineSession", coalesceSessions(onlineSessionWhite, onlineSessionBlack, onlineSessionId));
+        tag.putString("OnlineMatch", onlineMatchId == null ? "" : onlineMatchId);
+        tag.putInt("OnlineSide", onlineSide.ordinal());
+        if (onlineBoundPlayerWhite != null) {
+            tag.putUUID("OnlineBindW", onlineBoundPlayerWhite);
+        }
+        if (onlineBoundPlayerBlack != null) {
+            tag.putUUID("OnlineBindB", onlineBoundPlayerBlack);
+        }
+        if (onlineOwnerUuid != null) {
+            tag.putUUID("OnlineOwner", onlineOwnerUuid);
+        }
+        tag.putInt("OnlineCapW", onlineCapturedWhite);
+        tag.putInt("OnlineCapB", onlineCapturedBlack);
         if (gameSeatWhiteUuid != null) {
             tag.putUUID("GameSeatWhite", gameSeatWhiteUuid);
         }
@@ -834,6 +1317,53 @@ public class ChessBlockEntity extends BlockEntity {
             lastMoveToCol = tag.getInt("LastMoveToC");
         } else {
             clearLastMoveMarker();
+        }
+        if (tag.contains("OnlineEnabled") && tag.getBoolean("OnlineEnabled") && tag.contains("OnlineMatch")
+                && !tag.getString("OnlineMatch").isEmpty()) {
+            String match = tag.getString("OnlineMatch");
+            boolean hasLegacySession = tag.contains("OnlineSession") && !tag.getString("OnlineSession").isEmpty();
+            boolean newFmt = tag.contains("OnlineSessionW") || tag.contains("OnlineSessionB");
+            tablePlayMode = TablePlayMode.ONLINE;
+            onlineMatchId = match;
+            int sd = tag.getInt("OnlineSide");
+            onlineSide = sd == 1 ? OnlineSide.BLACK : OnlineSide.WHITE;
+            onlineCapturedWhite = tag.contains("OnlineCapW") ? tag.getInt("OnlineCapW") : 0;
+            onlineCapturedBlack = tag.contains("OnlineCapB") ? tag.getInt("OnlineCapB") : 0;
+            onlineSessionWhite = tag.contains("OnlineSessionW") ? tag.getString("OnlineSessionW") : "";
+            onlineSessionBlack = tag.contains("OnlineSessionB") ? tag.getString("OnlineSessionB") : "";
+            onlineBoundPlayerWhite = tag.hasUUID("OnlineBindW") ? tag.getUUID("OnlineBindW") : null;
+            onlineBoundPlayerBlack = tag.hasUUID("OnlineBindB") ? tag.getUUID("OnlineBindB") : null;
+            onlineOwnerUuid = tag.hasUUID("OnlineOwner") ? tag.getUUID("OnlineOwner") : null;
+            onlineSessionId = tag.contains("OnlineSession") ? tag.getString("OnlineSession") : "";
+            if (!newFmt && hasLegacySession) {
+                String os = onlineSessionId;
+                onlineSessionWhite = "";
+                onlineSessionBlack = "";
+                onlineBoundPlayerWhite = null;
+                onlineBoundPlayerBlack = null;
+                if (onlineOwnerUuid != null) {
+                    if (onlineSide == OnlineSide.BLACK) {
+                        onlineSessionBlack = os;
+                        onlineBoundPlayerBlack = onlineOwnerUuid;
+                    } else {
+                        onlineSessionWhite = os;
+                        onlineBoundPlayerWhite = onlineOwnerUuid;
+                    }
+                }
+            } else {
+                onlineSessionId = coalesceSessions(onlineSessionWhite, onlineSessionBlack, onlineSessionId);
+            }
+        } else {
+            tablePlayMode = TablePlayMode.LOCAL;
+            onlineSessionId = "";
+            onlineSessionWhite = "";
+            onlineSessionBlack = "";
+            onlineMatchId = "";
+            onlineBoundPlayerWhite = null;
+            onlineBoundPlayerBlack = null;
+            onlineOwnerUuid = null;
+            onlineCapturedWhite = 0;
+            onlineCapturedBlack = 0;
         }
     }
 }

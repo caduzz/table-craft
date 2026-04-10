@@ -50,13 +50,23 @@ public final class CheckersVictoryHud {
                         if (name.isEmpty()) {
                             return;
                         }
-                        boolean whiteWon = board.getGameStatus() == CheckersBlockEntity.CheckersGameStatus.WHITE_WIN;
-                        String subtitle = whiteWon ? "Brancas venceram" : "Pretas venceram";
+                        CheckersBlockEntity.CheckersGameStatus st = board.getGameStatus();
+                        String subtitle = switch (st) {
+                            case WHITE_WIN -> "Brancas venceram";
+                            case BLACK_WIN -> "Pretas venceram";
+                            case DRAW -> "Empate";
+                            default -> "";
+                        };
+                        if (subtitle.isEmpty()) {
+                            return;
+                        }
+                        boolean whiteWon = st == CheckersBlockEntity.CheckersGameStatus.WHITE_WIN;
+                        boolean draw = st == CheckersBlockEntity.CheckersGameStatus.DRAW;
 
                         int sw = mc.getWindow().getGuiScaledWidth();
                         int sh = mc.getWindow().getGuiScaledHeight();
-                        int nameColor = whiteWon ? 0xFFF8F8FF : 0xFFB8B8C8;
-                        int subColor = whiteWon ? 0xFFCCDDEE : 0xFF888899;
+                        int nameColor = draw ? 0xFFE8E8F0 : whiteWon ? 0xFFF8F8FF : 0xFFB8B8C8;
+                        int subColor = draw ? 0xFFAAB8CC : whiteWon ? 0xFFCCDDEE : 0xFF888899;
 
                         RenderSystem.enableBlend();
                         gui.fill(0, 0, sw, sh, 0x18000000);
