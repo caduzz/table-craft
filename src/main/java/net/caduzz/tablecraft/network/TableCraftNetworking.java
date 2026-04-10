@@ -4,6 +4,7 @@ import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.ModBlocks;
 import net.caduzz.tablecraft.block.entity.CheckersBlockEntity;
 import net.caduzz.tablecraft.block.entity.ChessBlockEntity;
+import net.caduzz.tablecraft.client.online.OnlineAuthCoordinator;
 import net.caduzz.tablecraft.online.OnlineSide;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,6 +31,11 @@ public final class TableCraftNetworking {
                 TableCraftNetworking::handleCheckersTableAction);
         reg.playToServer(OnlineTableBindPayload.TYPE, OnlineTableBindPayload.STREAM_CODEC, TableCraftNetworking::handleOnlineBind);
         reg.playToServer(OnlineTableClearPayload.TYPE, OnlineTableClearPayload.STREAM_CODEC, TableCraftNetworking::handleOnlineClear);
+        reg.playToClient(TableCraftLoginReadyPayload.TYPE, TableCraftLoginReadyPayload.STREAM_CODEC, TableCraftNetworking::handleLoginReadyClient);
+    }
+
+    private static void handleLoginReadyClient(TableCraftLoginReadyPayload payload, IPayloadContext ctx) {
+        ctx.enqueueWork(OnlineAuthCoordinator::onWorldLoginReady);
     }
 
     private static void handleChessTableAction(ChessTableSettingsActionPayload payload, IPayloadContext ctx) {

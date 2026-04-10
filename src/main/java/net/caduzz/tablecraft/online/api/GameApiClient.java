@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -40,6 +41,11 @@ import net.caduzz.tablecraft.block.entity.ChessBlockEntity.Piece;
  * Header: {@code X-TableCraft-Session: <sessionId>}<br>
  * Response (preferido): {@code {"board":[64 ints],"whiteTurn":true,"status":"PLAYING"|"FINISHED"|"WHITE_WIN"|"BLACK_WIN",
  * "result":...,"capturedWhite":0,"capturedBlack":0,"lastMove":{...}}}<br>
+ * Opcional (HUD): {@code whiteDisplayName} / {@code blackDisplayName}, ou {@code whitePlayer}/{@code blackPlayer} com
+ * {@code displayName}, ou {@code players.WHITE.displayName} (e análogo para BLACK).<br>
+ * Perspectiva da sessão: {@code playerDisplayName}, {@code playerPlayerUuid} (ou {@code playerUuid}),
+ * {@code opponentDisplayName}, {@code opponentPlayerUuid} — relativos ao dono do header; {@code opponent*} pode vir
+ * JSON {@code null} se o lugar estiver vazio. O mesmo esquema aplica-se a {@code /tablecraft/v1/checkers/matches/...}.<br>
  * Com xadrez via chess.js: partida pode ficar {@code FINISHED} com {@code result} (vitória brancas/pretas ou empate).<br>
  * Grelha API: {@code row} 0 = rank 1, {@code col} 0 = file a (converter para o índice interno do mod).<br>
  * Alternativa: objeto com {@code moves:[{fromRow,fromCol,toRow,toCol,side?,at?}]} (reconstitui o tabuleiro no cliente).
@@ -48,6 +54,16 @@ import net.caduzz.tablecraft.block.entity.ChessBlockEntity.Piece;
  * <h2>POST {base}/tablecraft/v1/chess/matches/{matchId}/move</h2>
  * Body: {@code {"fromRow":0..7,"fromCol":0..7,"toRow":0..7,"toCol":0..7}} na grelha da API (rate limited).<br>
  * Response: mesmo formato que /state.
+ *
+ * <h2>GET {base}/tablecraft/v1/me</h2>
+ * Header: {@code X-TableCraft-Session}<br>
+ * Perfil: {@code displayName}, {@code rating}, {@code wins}, {@code losses}, {@code memberSince}, …<br>
+ * Opcional (retomada de partida): {@code activeChessMatchId} + {@code activeChessYourSide}, ou objeto
+ * {@code activeChessMatch}{@code {matchId, yourSide}}, ou sinónimos {@code activeMatchId} / {@code activeChessSide}.
+ *
+ * <h2>GET {base}/tablecraft/v1/me/history?limit=…</h2>
+ * Header: {@code X-TableCraft-Session}<br>
+ * Lista: {@code matches:[{ gameType, opponentDisplayName, outcome, yourSide, createdAt, … }]}
  */
 public final class GameApiClient {
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(12)).build();
@@ -117,7 +133,13 @@ public final class GameApiClient {
 
     public static CompletableFuture<ChessApiSnapshot> getChessState(String baseUrl, String sessionId, String matchId) {
         String url = baseUrl + "/tablecraft/v1/chess/matches/" + encode(matchId) + "/state";
-        return sendJson("GET", url, sessionId, null).thenApply(GameApiClient::parseChessSnapshot);
+        return sendJson("GET", url, sessionId, null).thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    /** Como {@link #getChessState} mas inclui {@code yourSide} quando a API o envia no JSON. */
+    public static CompletableFuture<ChessStateWithMeta> getChessStateWithMeta(String baseUrl, String sessionId, String matchId) {
+        String url = baseUrl + "/tablecraft/v1/chess/matches/" + encode(matchId) + "/state";
+        return sendJson("GET", url, sessionId, null).thenApply(GameApiClient::parseChessStateWithMeta);
     }
 
     public static CompletableFuture<ChessApiSnapshot> postChessMove(String baseUrl, String sessionId, String matchId, int fr, int fc, int tr,
@@ -128,7 +150,212 @@ public final class GameApiClient {
         body.addProperty("toRow", apiRowFromModRow(tr));
         body.addProperty("toCol", tc);
         String url = baseUrl + "/tablecraft/v1/chess/matches/" + encode(matchId) + "/move";
-        return sendJson("POST", url, sessionId, body.toString()).thenApply(GameApiClient::parseChessSnapshot);
+        return sendJson("POST", url, sessionId, body.toString()).thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<PlayerProfileDTO> getMyProfile(String baseUrl, String sessionId) {
+        String url = baseUrl + "/tablecraft/v1/me";
+        return sendJson("GET", url, sessionId, null).thenApply(GameApiClient::parsePlayerProfile);
+    }
+
+    public static CompletableFuture<List<MatchHistoryDTO>> getMyMatchHistory(String baseUrl, String sessionId, int limit) {
+        int lim = Math.clamp(limit, 1, 100);
+        String url = baseUrl + "/tablecraft/v1/me/history?limit=" + lim;
+        return sendJson("GET", url, sessionId, null).thenApply(GameApiClient::parseMatchHistory);
+    }
+
+    private static PlayerProfileDTO parsePlayerProfile(String resp) {
+        JsonObject root = parseObject(resp);
+        boolean ok = root.has("ok") && root.get("ok").getAsBoolean();
+        if (!ok) {
+            throw new GameApiException("me rejected: " + truncate(resp));
+        }
+        JsonObject src = root;
+        if (root.has("data") && root.get("data").isJsonObject()) {
+            JsonObject d = root.getAsJsonObject("data");
+            if (!optString(d, "displayName").isEmpty() || d.has("rating") || d.has("wins")) {
+                src = d;
+            }
+        }
+        String playerUuid = coalesceString(src, root, "playerUuid");
+        ActiveChessBinding active = parseActiveChessBinding(root, src);
+        return new PlayerProfileDTO(
+                playerUuid.isEmpty() ? null : playerUuid,
+                coalesceString(src, root, "displayName"),
+                coalesceInt(src, root, "rating", 0),
+                coalesceInt(src, root, "wins", 0),
+                coalesceInt(src, root, "losses", 0),
+                coalesceString(src, root, "memberSince"),
+                active.matchId(),
+                active.yourSide());
+    }
+
+    private record ActiveChessBinding(@javax.annotation.Nullable String matchId, @javax.annotation.Nullable String yourSide) {
+    }
+
+    private static ActiveChessBinding parseActiveChessBinding(JsonObject root, JsonObject src) {
+        String mid = firstNonBlank(
+                coalesceString(src, root, "activeChessMatchId"),
+                coalesceString(src, root, "activeMatchId"),
+                coalesceString(src, root, "currentChessMatchId"),
+                coalesceString(src, root, "chessMatchId"));
+        String side = normalizeChessSideLabel(firstNonBlank(
+                coalesceString(src, root, "activeChessYourSide"),
+                coalesceString(src, root, "activeChessSide"),
+                coalesceString(src, root, "yourSideForActiveMatch")));
+        if (mid.isEmpty()) {
+            ActiveChessBinding nested = activeChessFromNestedObject(src, "activeChessMatch");
+            if (nested.matchId() != null) {
+                return new ActiveChessBinding(nested.matchId(), nested.yourSide() != null ? nested.yourSide() : emptyToNull(side));
+            }
+            nested = activeChessFromNestedObject(root, "activeChessMatch");
+            if (nested.matchId() != null) {
+                return new ActiveChessBinding(nested.matchId(), nested.yourSide() != null ? nested.yourSide() : emptyToNull(side));
+            }
+            ActiveChessBinding chess = activeChessFromNestedObject(src, "chess");
+            if (chess.matchId() != null) {
+                return new ActiveChessBinding(chess.matchId(), chess.yourSide() != null ? chess.yourSide() : emptyToNull(side));
+            }
+            chess = activeChessFromNestedObject(root, "chess");
+            if (chess.matchId() != null) {
+                return new ActiveChessBinding(chess.matchId(), chess.yourSide() != null ? chess.yourSide() : emptyToNull(side));
+            }
+        }
+        String midOrNull = mid.isEmpty() ? null : mid;
+        return new ActiveChessBinding(midOrNull, emptyToNull(side));
+    }
+
+    private static String emptyToNull(String s) {
+        return s == null || s.isEmpty() ? null : s;
+    }
+
+    private static ActiveChessBinding activeChessFromNestedObject(JsonObject parent, String key) {
+        if (!parent.has(key) || !parent.get(key).isJsonObject()) {
+            return new ActiveChessBinding(null, null);
+        }
+        JsonObject o = parent.getAsJsonObject(key);
+        String mid = firstNonBlank(optString(o, "matchId"), optString(o, "id"), optString(o, "match_id"));
+        String side = normalizeChessSideLabel(firstNonBlank(optString(o, "yourSide"), optString(o, "side"), optString(o, "color")));
+        return new ActiveChessBinding(mid.isEmpty() ? null : mid, side.isEmpty() ? null : side);
+    }
+
+    private static String firstNonBlank(String... parts) {
+        if (parts == null) {
+            return "";
+        }
+        for (String p : parts) {
+            if (p != null && !p.isBlank()) {
+                return p.trim();
+            }
+        }
+        return "";
+    }
+
+    /** @return {@code WHITE}, {@code BLACK} ou string vazia se não reconhecido */
+    private static String normalizeChessSideLabel(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String u = raw.trim().toUpperCase(Locale.ROOT);
+        if (u.equals("BLACK") || u.equals("B") || u.contains("BLACK")) {
+            return "BLACK";
+        }
+        if (u.equals("WHITE") || u.equals("W") || u.contains("WHITE")) {
+            return "WHITE";
+        }
+        return "";
+    }
+
+    private static String coalesceString(JsonObject primary, JsonObject fallback, String key) {
+        String a = optString(primary, key);
+        if (!a.isEmpty()) {
+            return a;
+        }
+        return optString(fallback, key);
+    }
+
+    private static int coalesceInt(JsonObject primary, JsonObject fallback, String key, int def) {
+        if (primary.has(key) && !primary.get(key).isJsonNull()) {
+            return optInt(primary, key, def);
+        }
+        return optInt(fallback, key, def);
+    }
+
+    private static List<MatchHistoryDTO> parseMatchHistory(String resp) {
+        JsonObject root = parseObject(resp);
+        boolean ok = root.has("ok") && root.get("ok").getAsBoolean();
+        if (!ok) {
+            throw new GameApiException("history rejected: " + truncate(resp));
+        }
+        JsonArray arr = null;
+        if (root.has("matches") && root.get("matches").isJsonArray()) {
+            arr = root.getAsJsonArray("matches");
+        } else if (root.has("data") && root.get("data").isJsonObject()) {
+            JsonObject d = root.getAsJsonObject("data");
+            if (d.has("matches") && d.get("matches").isJsonArray()) {
+                arr = d.getAsJsonArray("matches");
+            }
+        }
+        if (arr == null || arr.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<MatchHistoryDTO> out = new ArrayList<>(arr.size());
+        for (int i = 0; i < arr.size(); i++) {
+            if (!arr.get(i).isJsonObject()) {
+                continue;
+            }
+            JsonObject m = arr.get(i).getAsJsonObject();
+            String resultStr = null;
+            if (m.has("result") && !m.get("result").isJsonNull()) {
+                var r = m.get("result");
+                if (r.isJsonPrimitive() && r.getAsJsonPrimitive().isString()) {
+                    resultStr = r.getAsString();
+                } else {
+                    resultStr = r.toString();
+                }
+            }
+            out.add(new MatchHistoryDTO(
+                    optString(m, "matchId"),
+                    optString(m, "gameType"),
+                    optString(m, "status"),
+                    optString(m, "yourSide"),
+                    optString(m, "opponentDisplayName"),
+                    optString(m, "outcome"),
+                    resultStr,
+                    optString(m, "createdAt")));
+        }
+        return Collections.unmodifiableList(out);
+    }
+
+    private static String optString(JsonObject o, String key) {
+        if (!o.has(key) || o.get(key).isJsonNull()) {
+            return "";
+        }
+        var el = o.get(key);
+        if (el.isJsonPrimitive()) {
+            var p = el.getAsJsonPrimitive();
+            if (p.isString()) {
+                return p.getAsString();
+            }
+            if (p.isNumber()) {
+                return Integer.toString(p.getAsInt());
+            }
+            if (p.isBoolean()) {
+                return Boolean.toString(p.getAsBoolean());
+            }
+        }
+        return el.toString();
+    }
+
+    private static int optInt(JsonObject o, String key, int defaultValue) {
+        if (!o.has(key) || o.get(key).isJsonNull()) {
+            return defaultValue;
+        }
+        try {
+            return o.get(key).getAsInt();
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     private static String encode(String matchId) {
@@ -444,7 +671,7 @@ public final class GameApiClient {
         return new ChessReplayResult(boardToOrdinals(board), whiteToMove, lfr, lfc, ltr, ltc);
     }
 
-    private static ChessApiSnapshot parseChessSnapshot(String json) {
+    private static ChessStateWithMeta parseChessStateWithMeta(String json) {
         JsonObject root = parseObject(json);
         JsonObject o = unwrapChessState(root);
         int[] board;
@@ -485,7 +712,105 @@ public final class GameApiClient {
         String st = resolveStatusKey(o, root);
         int cw = o.has("capturedWhite") ? o.get("capturedWhite").getAsInt() : 0;
         int cb = o.has("capturedBlack") ? o.get("capturedBlack").getAsInt() : 0;
-        return new ChessApiSnapshot(board, wt, st, cw, cb, lfr, lfc, ltr, ltc);
+        String wHud = parseChessHudWhiteName(o, root);
+        String bHud = parseChessHudBlackName(o, root);
+        String pName = firstNonBlank(optString(o, "playerDisplayName"), optString(root, "playerDisplayName"));
+        String pUuid = firstNonBlank(
+                optString(o, "playerPlayerUuid"),
+                optString(o, "playerUuid"),
+                optString(root, "playerPlayerUuid"),
+                optString(root, "playerUuid"));
+        String oName = firstNonBlank(optString(o, "opponentDisplayName"), optString(root, "opponentDisplayName"));
+        String oUuid = firstNonBlank(optString(o, "opponentPlayerUuid"), optString(root, "opponentPlayerUuid"));
+        ChessApiSnapshot snap = new ChessApiSnapshot(
+                board,
+                wt,
+                st,
+                cw,
+                cb,
+                lfr,
+                lfc,
+                ltr,
+                ltc,
+                blankToNull(wHud),
+                blankToNull(bHud),
+                blankToNull(pName),
+                blankToNull(pUuid),
+                blankToNull(oName),
+                blankToNull(oUuid));
+        String yourSide = firstNonBlank(
+                normalizeChessSideLabel(optString(o, "yourSide")),
+                normalizeChessSideLabel(optString(o, "mySide")),
+                normalizeChessSideLabel(optString(o, "playerSide")),
+                normalizeChessSideLabel(optString(root, "yourSide")));
+        String sideOrNull = yourSide.isEmpty() ? null : yourSide;
+        return new ChessStateWithMeta(snap, sideOrNull);
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
+    }
+
+    private static String parseChessHudWhiteName(JsonObject o, JsonObject root) {
+        String w = firstNonBlank(
+                optString(o, "whiteDisplayName"),
+                optString(o, "whiteName"),
+                optString(o, "whitePlayerName"),
+                optString(root, "whiteDisplayName"));
+        if (!w.isEmpty()) {
+            return w;
+        }
+        if (o.has("whitePlayer") && o.get("whitePlayer").isJsonObject()) {
+            JsonObject wp = o.getAsJsonObject("whitePlayer");
+            w = firstNonBlank(optString(wp, "displayName"), optString(wp, "name"), optString(wp, "username"));
+            if (!w.isEmpty()) {
+                return w;
+            }
+        }
+        if (o.has("players") && o.get("players").isJsonObject()) {
+            JsonObject pl = o.getAsJsonObject("players");
+            for (String key : new String[] { "WHITE", "white", "White" }) {
+                if (pl.has(key) && pl.get(key).isJsonObject()) {
+                    JsonObject side = pl.getAsJsonObject(key);
+                    w = firstNonBlank(optString(side, "displayName"), optString(side, "name"), optString(side, "username"));
+                    if (!w.isEmpty()) {
+                        return w;
+                    }
+                }
+            }
+        }
+        return "";
+    }
+
+    private static String parseChessHudBlackName(JsonObject o, JsonObject root) {
+        String b = firstNonBlank(
+                optString(o, "blackDisplayName"),
+                optString(o, "blackName"),
+                optString(o, "blackPlayerName"),
+                optString(root, "blackDisplayName"));
+        if (!b.isEmpty()) {
+            return b;
+        }
+        if (o.has("blackPlayer") && o.get("blackPlayer").isJsonObject()) {
+            JsonObject bp = o.getAsJsonObject("blackPlayer");
+            b = firstNonBlank(optString(bp, "displayName"), optString(bp, "name"), optString(bp, "username"));
+            if (!b.isEmpty()) {
+                return b;
+            }
+        }
+        if (o.has("players") && o.get("players").isJsonObject()) {
+            JsonObject pl = o.getAsJsonObject("players");
+            for (String key : new String[] { "BLACK", "black", "Black" }) {
+                if (pl.has(key) && pl.get(key).isJsonObject()) {
+                    JsonObject side = pl.getAsJsonObject(key);
+                    b = firstNonBlank(optString(side, "displayName"), optString(side, "name"), optString(side, "username"));
+                    if (!b.isEmpty()) {
+                        return b;
+                    }
+                }
+            }
+        }
+        return "";
     }
 
     private static String truncate(String s) {

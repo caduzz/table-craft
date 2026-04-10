@@ -1,19 +1,27 @@
 package net.caduzz.tablecraft.client.online;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import javax.annotation.Nullable;
+
+import net.caduzz.tablecraft.block.ModBlocks;
+import net.caduzz.tablecraft.block.entity.ChessBlockEntity;
 import net.caduzz.tablecraft.config.TableCraftConfig;
 import net.caduzz.tablecraft.network.OnlineTableBindPayload;
 import net.caduzz.tablecraft.network.OnlineTableClearPayload;
 import net.caduzz.tablecraft.network.TableCraftNetworking;
+import net.caduzz.tablecraft.online.TablePlayMode;
+import net.caduzz.tablecraft.online.api.ChessApiSnapshot;
 import net.caduzz.tablecraft.online.api.GameApiClient;
 import net.caduzz.tablecraft.online.api.GameApiException;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.block.entity.BlockEntity;
 
 /**
  * Registo na API, fila de matchmaking e ligação automática à mesa de xadrez associada ao menu.
@@ -112,6 +120,7 @@ public final class BoardOnlineIntegration {
             }
             busy = false;
             int sideOrd = "BLACK".equalsIgnoreCase(side) ? 1 : 0;
+            ClientPlayerRegistrationStore.setLastChessOnlineBinding(mid, side != null ? side : "WHITE");
             TableCraftNetworking.sendOnlineBind(
                     new OnlineTableBindPayload(boardPos, OnlineTableBindPayload.GAME_CHESS, sid, mid, sideOrd));
             ClientPendingOnlineMatch.clear();
@@ -138,6 +147,94 @@ public final class BoardOnlineIntegration {
     public void cancelMatchmakingIfLeaving() {
         matchmakingToken++;
         busy = false;
+    }
+
+    /**
+     * Resume o estado na mesa deste menu e, com sessão API + matchId (mesa ou último guardado), consulta {@code /state}.
+     */
+    public void checkOnlineGame(Minecraft mc) {
+        if (busy || mc.player == null || mc.level == null) {
+            return;
+        }
+        String localPart = buildLocalOnlineStatus(mc);
+        if (!ClientPlayerRegistrationStore.isRegistered()) {
+            statusLine.set(Component.literal(localPart + "Registe-se na API para consultar o estado remoto."));
+            return;
+        }
+        String matchId = resolveMatchIdForProbe(mc);
+        if (matchId.isEmpty()) {
+            statusLine.set(Component.literal(localPart + "Nenhum matchId conhecido — faça matchmaking e ligue esta mesa."));
+            return;
+        }
+        busy = true;
+        statusLine.set(Component.literal("A verificar na API…"));
+        String base = TableCraftConfig.apiBaseUrl();
+        String sid = ClientPlayerRegistrationStore.getSessionId();
+        final String mid = matchId;
+        final String local = localPart;
+        GameApiClient.getChessState(base, sid, mid).whenComplete((snap, err) -> mc.execute(() -> {
+            busy = false;
+            if (err != null) {
+                statusLine.set(Component.literal(local + "API: " + rootMsg(err)));
+                return;
+            }
+            statusLine.set(Component.literal(local + describeApiSnapshot(mid, snap)));
+        }));
+    }
+
+    @Nullable
+    private ChessBlockEntity chessAt(Minecraft mc) {
+        if (mc.level == null) {
+            return null;
+        }
+        if (!mc.level.getBlockState(boardPos).is(ModBlocks.CHESS_BLOCK.get())) {
+            return null;
+        }
+        BlockEntity be = mc.level.getBlockEntity(boardPos);
+        return be instanceof ChessBlockEntity c ? c : null;
+    }
+
+    private String buildLocalOnlineStatus(Minecraft mc) {
+        ChessBlockEntity chess = chessAt(mc);
+        if (chess == null) {
+            return "Mesa indisponível. ";
+        }
+        if (chess.getTablePlayMode() != TablePlayMode.ONLINE) {
+            return "Nesta mesa: modo local. ";
+        }
+        UUID self = mc.player.getUUID();
+        if (chess.getOnlineSideFor(self) == null) {
+            return "Nesta mesa: online, mas a sua conta não está ligada a esta partida. ";
+        }
+        if (chess.isGameInProgress()) {
+            return "Nesta mesa: você participa — partida em curso. ";
+        }
+        return "Nesta mesa: você participa — partida terminada (aguarde reset no servidor). ";
+    }
+
+    private String resolveMatchIdForProbe(Minecraft mc) {
+        ChessBlockEntity chess = chessAt(mc);
+        if (chess != null && chess.getTablePlayMode() == TablePlayMode.ONLINE && mc.player != null) {
+            if (chess.getOnlineSideFor(mc.player.getUUID()) != null) {
+                String mid = chess.getOnlineMatchId();
+                if (!mid.isEmpty()) {
+                    return mid;
+                }
+            }
+        }
+        return ClientPlayerRegistrationStore.getLastChessMatchId();
+    }
+
+    private static String describeApiSnapshot(String matchId, ChessApiSnapshot snap) {
+        String st = snap.statusKey() != null ? snap.statusKey() : "PLAYING";
+        String human = switch (st) {
+            case "PLAYING" -> "em curso";
+            case "WHITE_WIN" -> "terminada (vitória das brancas)";
+            case "BLACK_WIN" -> "terminada (vitória das pretas)";
+            case "DRAW" -> "terminada (empate)";
+            default -> "estado: " + st;
+        };
+        return "API (match " + matchId + "): " + human + ".";
     }
 
     private static String rootMsg(Throwable err) {

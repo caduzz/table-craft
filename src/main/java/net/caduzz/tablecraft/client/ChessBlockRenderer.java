@@ -1,11 +1,15 @@
 package net.caduzz.tablecraft.client;
 
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.caduzz.tablecraft.block.ChessBlock;
 import net.caduzz.tablecraft.block.entity.ChessBlockEntity;
 import net.caduzz.tablecraft.block.entity.ChessBlockEntity.Piece;
+import net.caduzz.tablecraft.online.OnlineSide;
+import net.caduzz.tablecraft.online.TablePlayMode;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
@@ -62,6 +66,13 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
     public void render(ChessBlockEntity be, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight, int packedOverlay) {
         poseStack.pushPose();
         ChessBlock.applyBoardRenderRotation(poseStack, be.getBlockState().getValue(ChessBlock.FACING));
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && be.getTablePlayMode() == TablePlayMode.ONLINE
+                && be.getOnlineSideFor(mc.player.getUUID()) == OnlineSide.BLACK) {
+            poseStack.translate(0.5f, 0f, 0.5f);
+            poseStack.mulPose(new Quaternionf().rotationY(Mth.PI));
+            poseStack.translate(-0.5f, 0f, -0.5f);
+        }
 
         VertexConsumer translucent = buffer.getBuffer(RenderType.entityTranslucent(WHITE_TEX));
         if (be.showsPreviousMove() && be.hasLastMoveMarker()) {

@@ -103,9 +103,15 @@ public class ChessBlockEntity extends BlockEntity {
     private long onlineLastPollTick;
     private int onlineCapturedWhite;
     private int onlineCapturedBlack;
+    /** Nomes na HUD (modo online): jogador(es) no Minecraft + opcionalmente campos da API no estado. */
+    private String onlineHudWhiteName = "";
+    private String onlineHudBlackName = "";
     /** Snapshot da API a aplicar quando a animação online terminar. */
     @Nullable
     private ChessApiSnapshot onlinePendingSnapshot;
+    /** Sessão usada no GET/POST que produziu {@link #onlinePendingSnapshot} (para mapear player/opponent → brancas/pretas). */
+    @Nullable
+    private String onlinePendingSnapshotSessionId;
 
     /** Origem/destino vazios no tabuleiro até o fim da animação; a peça é desenhada só no cliente interpolando. */
     private int animFromRow;
@@ -206,7 +212,7 @@ public class ChessBlockEntity extends BlockEntity {
                 }
                 return;
             }
-            applyChessApiSnapshot(snap);
+            applyChessApiSnapshot(snap, pollSid);
             setChanged();
             syncToClients();
         }));
@@ -238,16 +244,21 @@ public class ChessBlockEntity extends BlockEntity {
             onlineBoundPlayerBlack = null;
             onlineSessionId = "";
             onlineOwnerUuid = null;
+            onlineHudWhiteName = "";
+            onlineHudBlackName = "";
         }
         this.onlineMatchId = matchId != null ? matchId : "";
         this.onlineSide = side;
         this.onlineOwnerUuid = null;
+        String profileName = player.getGameProfile().getName();
         if (side == OnlineSide.WHITE) {
             this.onlineSessionWhite = sid;
             this.onlineBoundPlayerWhite = player.getUUID();
+            this.onlineHudWhiteName = profileName != null ? profileName : "";
         } else {
             this.onlineSessionBlack = sid;
             this.onlineBoundPlayerBlack = player.getUUID();
+            this.onlineHudBlackName = profileName != null ? profileName : "";
         }
         this.onlineSessionId = coalesceSessions(onlineSessionWhite, onlineSessionBlack, onlineSessionId);
         this.tablePlayMode = TablePlayMode.ONLINE;
@@ -256,11 +267,12 @@ public class ChessBlockEntity extends BlockEntity {
         clearSelection();
         clearAnimation();
         onlinePendingSnapshot = null;
+        onlinePendingSnapshotSessionId = null;
         String base = TableCraftConfig.apiBaseUrl();
         String pollSid = pollSessionId();
         GameApiClient.getChessState(base, pollSid, onlineMatchId).whenComplete((snap, err) -> runOnServer(() -> {
             if (err == null) {
-                applyChessApiSnapshot(snap);
+                applyChessApiSnapshot(snap, pollSid);
             }
             setChanged();
             syncToClients();
@@ -281,8 +293,11 @@ public class ChessBlockEntity extends BlockEntity {
         onlineOwnerUuid = null;
         onlineMoveInFlight = false;
         onlinePendingSnapshot = null;
+        onlinePendingSnapshotSessionId = null;
         onlineCapturedWhite = 0;
         onlineCapturedBlack = 0;
+        onlineHudWhiteName = "";
+        onlineHudBlackName = "";
         if (notify != null) {
             notify.displayClientMessage(Component.literal("Sessão online encerrada na mesa."), true);
         }
@@ -290,17 +305,17 @@ public class ChessBlockEntity extends BlockEntity {
         syncToClients();
     }
 
-    private void applyChessApiSnapshot(ChessApiSnapshot s) {
-        if (tablePlayMode == TablePlayMode.ONLINE && tryBeginOnlineMoveAnimation(s)) {
+    private void applyChessApiSnapshot(ChessApiSnapshot s, @Nullable String sessionUsedForRequest) {
+        if (tablePlayMode == TablePlayMode.ONLINE && tryBeginOnlineMoveAnimation(s, sessionUsedForRequest)) {
             return;
         }
-        applyChessApiSnapshotDirect(s);
+        applyChessApiSnapshotDirect(s, sessionUsedForRequest);
     }
 
     /**
      * Inicia a mesma animação que {@link #tryMove} para um lance vindo da API (outro jogador ou confirmação do POST).
      */
-    private boolean tryBeginOnlineMoveAnimation(ChessApiSnapshot s) {
+    private boolean tryBeginOnlineMoveAnimation(ChessApiSnapshot s, @Nullable String sessionUsedForRequest) {
         if (level == null || gameStatus != ChessGameStatus.PLAYING) {
             return false;
         }
@@ -330,21 +345,24 @@ public class ChessBlockEntity extends BlockEntity {
         animPiece = moving;
         animStartGameTime = level.getGameTime();
         onlinePendingSnapshot = s;
+        onlinePendingSnapshotSessionId = sessionUsedForRequest;
         return true;
     }
 
     private void finishOnlineAnimatedMove() {
         ChessApiSnapshot s = onlinePendingSnapshot;
+        String sess = onlinePendingSnapshotSessionId;
         onlinePendingSnapshot = null;
+        onlinePendingSnapshotSessionId = null;
         clearAnimation();
         if (s != null) {
-            applyChessApiSnapshotDirect(s);
+            applyChessApiSnapshotDirect(s, sess);
         }
         setChanged();
         syncToClients();
     }
 
-    private void applyChessApiSnapshotDirect(ChessApiSnapshot s) {
+    private void applyChessApiSnapshotDirect(ChessApiSnapshot s, @Nullable String sessionUsedForRequest) {
         Piece[] values = Piece.values();
         for (int i = 0; i < 64; i++) {
             int ord = s.boardOrdinals()[i];
@@ -353,6 +371,16 @@ public class ChessBlockEntity extends BlockEntity {
         whiteTurn = s.whiteTurn();
         onlineCapturedWhite = s.capturedWhite();
         onlineCapturedBlack = s.capturedBlack();
+        if (tablePlayMode == TablePlayMode.ONLINE) {
+            if (s.whiteDisplayName() != null && !s.whiteDisplayName().isBlank()) {
+                onlineHudWhiteName = s.whiteDisplayName().trim();
+            }
+            if (s.blackDisplayName() != null && !s.blackDisplayName().isBlank()) {
+                onlineHudBlackName = s.blackDisplayName().trim();
+            }
+            // Sobrepõe quando a API envia player/opponent na perspectiva da sessão do pedido.
+            applySessionRelativeHudFromSnapshot(s, sessionUsedForRequest);
+        }
         String key = s.statusKey();
         if ("WHITE_WIN".equalsIgnoreCase(key)) {
             if (gameStatus != ChessGameStatus.WHITE_WIN) {
@@ -382,6 +410,56 @@ public class ChessBlockEntity extends BlockEntity {
         clearAnimation();
         // API pode atrasar ou omitir status; alinhar com as regras do mod (xeque-mate / afogamento).
         maybeFinishChessIfNoLegalMoves();
+    }
+
+    /**
+     * Preenche {@link #onlineHudWhiteName} / {@link #onlineHudBlackName} a partir de
+     * {@code playerDisplayName} / {@code opponentDisplayName} da API, relativos à sessão do pedido HTTP.
+     */
+    private void applySessionRelativeHudFromSnapshot(ChessApiSnapshot s, @Nullable String sessionUsedForRequest) {
+        if (tablePlayMode != TablePlayMode.ONLINE || sessionUsedForRequest == null || sessionUsedForRequest.isEmpty()) {
+            return;
+        }
+        String p = s.playerDisplayName() != null ? s.playerDisplayName().trim() : "";
+        String o = s.opponentDisplayName() != null ? s.opponentDisplayName().trim() : "";
+        if (p.isEmpty() && o.isEmpty()) {
+            return;
+        }
+        if (!onlineSessionWhite.isEmpty() && sessionUsedForRequest.equals(onlineSessionWhite)) {
+            if (!p.isEmpty()) {
+                onlineHudWhiteName = p;
+            }
+            if (!o.isEmpty()) {
+                onlineHudBlackName = o;
+            }
+            return;
+        }
+        if (!onlineSessionBlack.isEmpty() && sessionUsedForRequest.equals(onlineSessionBlack)) {
+            if (!p.isEmpty()) {
+                onlineHudBlackName = p;
+            }
+            if (!o.isEmpty()) {
+                onlineHudWhiteName = o;
+            }
+            return;
+        }
+        if (!onlineSessionId.isEmpty() && sessionUsedForRequest.equals(onlineSessionId)) {
+            if (onlineSide == OnlineSide.WHITE) {
+                if (!p.isEmpty()) {
+                    onlineHudWhiteName = p;
+                }
+                if (!o.isEmpty()) {
+                    onlineHudBlackName = o;
+                }
+            } else {
+                if (!p.isEmpty()) {
+                    onlineHudBlackName = p;
+                }
+                if (!o.isEmpty()) {
+                    onlineHudWhiteName = o;
+                }
+            }
+        }
     }
 
     /**
@@ -445,7 +523,7 @@ public class ChessBlockEntity extends BlockEntity {
                 syncToClients();
                 return;
             }
-            applyChessApiSnapshot(snap);
+            applyChessApiSnapshot(snap, moveSid);
             clearSelection();
             player.displayClientMessage(Component.literal("Lance confirmado pela API."), true);
             setChanged();
@@ -455,6 +533,11 @@ public class ChessBlockEntity extends BlockEntity {
 
     public TablePlayMode getTablePlayMode() {
         return tablePlayMode;
+    }
+
+    /** ID da partida na API (cliente sincronizado); vazio se não estiver em modo online. */
+    public String getOnlineMatchId() {
+        return onlineMatchId == null ? "" : onlineMatchId;
     }
 
     public OnlineSide getOnlineSide() {
@@ -619,7 +702,7 @@ public class ChessBlockEntity extends BlockEntity {
             }
             return;
         }
-        int[] cell = hitToCell(hit);
+        int[] cell = hitToCell(hit, player);
         if (cell == null) {
             return;
         }
@@ -925,7 +1008,7 @@ public class ChessBlockEntity extends BlockEntity {
         return blackClockTicks;
     }
 
-    private int[] hitToCell(BlockHitResult hit) {
+    private int[] hitToCell(BlockHitResult hit, Player player) {
         if (hit.getDirection() != Direction.UP) {
             return null;
         }
@@ -936,6 +1019,10 @@ public class ChessBlockEntity extends BlockEntity {
         }
         Vector2d logical = new Vector2d();
         ChessBlock.axisAlignedHitToLogicalBoardFrac(v.x, v.z, getBlockState().getValue(ChessBlock.FACING), logical);
+        if (tablePlayMode == TablePlayMode.ONLINE && player != null && getOnlineSideFor(player.getUUID()) == OnlineSide.BLACK) {
+            logical.x = 1.0 - logical.x;
+            logical.y = 1.0 - logical.y;
+        }
         int col = Mth.clamp((int) (logical.x * 8), 0, 7);
         int row = Mth.clamp((int) (logical.y * 8), 0, 7);
         return new int[] { row, col };
@@ -1090,6 +1177,33 @@ public class ChessBlockEntity extends BlockEntity {
         return gameSeatBlackName == null ? "" : gameSeatBlackName;
     }
 
+    /** Mesa em modo online com partida API ativa (para layout da HUD). */
+    public boolean isChessOnlineTable() {
+        return tablePlayMode == TablePlayMode.ONLINE && onlineMatchId != null && !onlineMatchId.isEmpty();
+    }
+
+    /** Texto do jogador das brancas na HUD (local: assento; online: nome guardado / API). */
+    public String getChessHudWhiteDisplayName() {
+        if (!isChessOnlineTable()) {
+            return hasGameSeatWhite() ? getGameSeatWhiteName() : "—";
+        }
+        if (onlineHudWhiteName != null && !onlineHudWhiteName.isBlank()) {
+            return onlineHudWhiteName.trim();
+        }
+        return "—";
+    }
+
+    /** Texto do jogador das pretas na HUD (local: assento; online: nome guardado / API). */
+    public String getChessHudBlackDisplayName() {
+        if (!isChessOnlineTable()) {
+            return hasGameSeatBlack() ? getGameSeatBlackName() : "—";
+        }
+        if (onlineHudBlackName != null && !onlineHudBlackName.isBlank()) {
+            return onlineHudBlackName.trim();
+        }
+        return "—";
+    }
+
     public boolean isRegisteredParticipant(UUID playerId) {
         if (playerId == null) {
             return false;
@@ -1212,6 +1326,8 @@ public class ChessBlockEntity extends BlockEntity {
         }
         tag.putInt("OnlineCapW", onlineCapturedWhite);
         tag.putInt("OnlineCapB", onlineCapturedBlack);
+        tag.putString("OnlineHudW", onlineHudWhiteName == null ? "" : onlineHudWhiteName);
+        tag.putString("OnlineHudB", onlineHudBlackName == null ? "" : onlineHudBlackName);
         if (gameSeatWhiteUuid != null) {
             tag.putUUID("GameSeatWhite", gameSeatWhiteUuid);
         }
@@ -1329,6 +1445,8 @@ public class ChessBlockEntity extends BlockEntity {
             onlineSide = sd == 1 ? OnlineSide.BLACK : OnlineSide.WHITE;
             onlineCapturedWhite = tag.contains("OnlineCapW") ? tag.getInt("OnlineCapW") : 0;
             onlineCapturedBlack = tag.contains("OnlineCapB") ? tag.getInt("OnlineCapB") : 0;
+            onlineHudWhiteName = tag.contains("OnlineHudW") ? tag.getString("OnlineHudW") : "";
+            onlineHudBlackName = tag.contains("OnlineHudB") ? tag.getString("OnlineHudB") : "";
             onlineSessionWhite = tag.contains("OnlineSessionW") ? tag.getString("OnlineSessionW") : "";
             onlineSessionBlack = tag.contains("OnlineSessionB") ? tag.getString("OnlineSessionB") : "";
             onlineBoundPlayerWhite = tag.hasUUID("OnlineBindW") ? tag.getUUID("OnlineBindW") : null;
@@ -1364,6 +1482,8 @@ public class ChessBlockEntity extends BlockEntity {
             onlineOwnerUuid = null;
             onlineCapturedWhite = 0;
             onlineCapturedBlack = 0;
+            onlineHudWhiteName = "";
+            onlineHudBlackName = "";
         }
     }
 }

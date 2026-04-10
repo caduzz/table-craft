@@ -100,13 +100,19 @@ public final class ChessPlayersHud {
 
                 gui.drawString(mc.font, "Brancas", leftX + pad, BoardPlayersHudMetrics.titleY(y), whiteColor, true);
 
-                if (chess.hasGameSeatWhite()) {
-                    drawPlayerHead(gui, mc, leftX + pad, headY, BoardPlayersHudMetrics.HEAD_SIZE, chess.getWhiteSeatGameProfile());
+                boolean onlineTable = chess.isChessOnlineTable();
+                String whiteName = chess.getChessHudWhiteDisplayName();
+                int nameBaseline = BoardPlayersHudMetrics.nameBaselineY(headY, mc);
+                if (onlineTable) {
+                    String fitted = fitHudName(mc, whiteName, panelW - 2 * pad);
+                    gui.drawCenteredString(mc.font, fitted, leftX + panelW / 2, nameBaseline, 0xE0E0E0);
+                } else {
+                    if (chess.hasGameSeatWhite()) {
+                        drawPlayerHead(gui, mc, leftX + pad, headY, BoardPlayersHudMetrics.HEAD_SIZE, chess.getWhiteSeatGameProfile());
+                    }
+                    gui.drawString(mc.font, whiteName, leftX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP, nameBaseline,
+                            0xE0E0E0, true);
                 }
-
-                String whiteName = chess.hasGameSeatWhite() ? chess.getGameSeatWhiteName() : "—";
-                gui.drawString(mc.font, whiteName, leftX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
-                        BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
 
                 boolean clockRuns = chess.hasGameSeatWhite() && chess.hasGameSeatBlack();
                 int clockY = BoardPlayersHudMetrics.clockBaselineY(headY, mc);
@@ -126,13 +132,18 @@ public final class ChessPlayersHud {
 
                 gui.drawString(mc.font, "Pretas", rightX + pad, BoardPlayersHudMetrics.titleY(y), blackColor, true);
 
-                if (chess.hasGameSeatBlack()) {
-                    drawPlayerHead(gui, mc, rightX + pad, headY, BoardPlayersHudMetrics.HEAD_SIZE, chess.getBlackSeatGameProfile());
+                String blackName = chess.getChessHudBlackDisplayName();
+                int blackNameBaseline = BoardPlayersHudMetrics.nameBaselineY(headY, mc);
+                if (onlineTable) {
+                    String fittedB = fitHudName(mc, blackName, panelW - 2 * pad);
+                    gui.drawCenteredString(mc.font, fittedB, rightX + panelW / 2, blackNameBaseline, 0xE0E0E0);
+                } else {
+                    if (chess.hasGameSeatBlack()) {
+                        drawPlayerHead(gui, mc, rightX + pad, headY, BoardPlayersHudMetrics.HEAD_SIZE, chess.getBlackSeatGameProfile());
+                    }
+                    gui.drawString(mc.font, blackName, rightX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
+                            blackNameBaseline, 0xE0E0E0, true);
                 }
-
-                String blackName = chess.hasGameSeatBlack() ? chess.getGameSeatBlackName() : "—";
-                gui.drawString(mc.font, blackName, rightX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
-                        BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
 
                 String blackClock = clockRuns ? BoardGameHudFormat.formatClockTicks(chess.getBlackClockTicks()) : "—";
                 int bcx = rightX + panelW - pad - mc.font.width(blackClock);
@@ -151,5 +162,23 @@ public final class ChessPlayersHud {
                 );
             }
         });
+    }
+
+    /** Encurta o nome para caber no painel (largura em px GUI). */
+    private static String fitHudName(Minecraft mc, String raw, int maxWidth) {
+        if (raw == null || raw.isEmpty()) {
+            return "—";
+        }
+        if (mc.font.width(raw) <= maxWidth) {
+            return raw;
+        }
+        String ell = "…";
+        for (int len = raw.length() - 1; len >= 1; len--) {
+            String t = raw.substring(0, len) + ell;
+            if (mc.font.width(t) <= maxWidth) {
+                return t;
+            }
+        }
+        return ell;
     }
 }
