@@ -81,6 +81,7 @@ public class CheckersBlockEntity extends BlockEntity {
     private String lastWinnerDisplayName = "";
     private int whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
     private int blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+    private int playerTimePresetIndex = BoardGameClockConfig.closestPresetIndexFromTicks(BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS);
 
     public CheckersBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.CHECKERS.get(), pos, state);
@@ -355,8 +356,23 @@ public class CheckersBlockEntity extends BlockEntity {
     }
 
     private void resetGameClock() {
-        whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
-        blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+        int playerTicks = BoardGameClockConfig.ticksFromMinutes(
+                BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS[playerTimePresetIndex]);
+        whiteClockTicks = playerTicks;
+        blackClockTicks = playerTicks;
+    }
+
+    public void cyclePlayerTimePreset(Player player) {
+        if (gameStatus != CheckersGameStatus.PLAYING || hasGameSeatWhite() || hasGameSeatBlack()) {
+            player.displayClientMessage(Component.literal("Altere o tempo antes de iniciar a partida."), true);
+            return;
+        }
+        playerTimePresetIndex = (playerTimePresetIndex + 1) % BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS.length;
+        resetGameClock();
+        int minutes = BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS[playerTimePresetIndex];
+        player.displayClientMessage(Component.literal("Tempo da mesa: " + minutes + " min por jogador"), true);
+        setChanged();
+        syncToClients();
     }
 
     private boolean bothGameSeatsOccupied() {
@@ -708,6 +724,7 @@ public class CheckersBlockEntity extends BlockEntity {
         tag.putString("LastWinnerName", lastWinnerDisplayName == null ? "" : lastWinnerDisplayName);
         tag.putInt("ClockWhiteTicks", whiteClockTicks);
         tag.putInt("ClockBlackTicks", blackClockTicks);
+        tag.putInt("ClockPresetIndex", playerTimePresetIndex);
     }
 
     private void readCommonTag(CompoundTag tag) {
@@ -738,6 +755,13 @@ public class CheckersBlockEntity extends BlockEntity {
         lastWinnerDisplayName = tag.contains("LastWinnerName") ? tag.getString("LastWinnerName") : "";
         whiteClockTicks = tag.contains("ClockWhiteTicks") ? tag.getInt("ClockWhiteTicks") : BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
         blackClockTicks = tag.contains("ClockBlackTicks") ? tag.getInt("ClockBlackTicks") : BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+        int presetCount = BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS.length;
+        int presetIndex = tag.contains("ClockPresetIndex") ? tag.getInt("ClockPresetIndex")
+                : BoardGameClockConfig.closestPresetIndexFromTicks(whiteClockTicks);
+        if (presetIndex < 0 || presetIndex >= presetCount) {
+            presetIndex = BoardGameClockConfig.closestPresetIndexFromTicks(whiteClockTicks);
+        }
+        playerTimePresetIndex = presetIndex;
         if (tag.getBoolean("AnimActive")) {
             animFromRow = tag.getInt("AnimFromR");
             animFromCol = tag.getInt("AnimFromC");

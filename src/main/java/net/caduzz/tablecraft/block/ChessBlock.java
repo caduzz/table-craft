@@ -137,6 +137,10 @@ public class ChessBlock extends BaseEntityBlock {
         }
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof ChessBlockEntity chess) {
+            if (player.isShiftKeyDown()) {
+                chess.cyclePlayerTimePreset(player);
+                return ItemInteractionResult.CONSUME;
+            }
             chess.handlePlayerClick(player, hitResult);
         }
         return ItemInteractionResult.CONSUME;
@@ -150,6 +154,10 @@ public class ChessBlock extends BaseEntityBlock {
         }
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof ChessBlockEntity chess) {
+            if (player.isShiftKeyDown()) {
+                chess.cyclePlayerTimePreset(player);
+                return InteractionResult.CONSUME;
+            }
             chess.handlePlayerClick(player, hitResult);
         }
         return InteractionResult.CONSUME;
