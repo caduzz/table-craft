@@ -79,8 +79,8 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         renderPiecePass(pose, be, buffer, packedLight, Piece.BLACK_PAWN, PAWN_BLACK_TEX, ChessBlockRenderer::renderPawnModel);
         renderPiecePass(pose, be, buffer, packedLight, Piece.WHITE_ROOK, TOWER_WHITE_TEX, ChessBlockRenderer::renderTowerModel);
         renderPiecePass(pose, be, buffer, packedLight, Piece.BLACK_ROOK, TOWER_BLACK_TEX, ChessBlockRenderer::renderTowerModel);
-        renderPiecePass(pose, be, buffer, packedLight, Piece.WHITE_KNIGHT, HORSE_WHITE_TEX, ChessBlockRenderer::renderHorseModel);
-        renderPiecePass(pose, be, buffer, packedLight, Piece.BLACK_KNIGHT, HORSE_BLACK_TEX, ChessBlockRenderer::renderHorseModel);
+        renderPiecePass(pose, be, buffer, packedLight, Piece.WHITE_KNIGHT, HORSE_WHITE_TEX, ChessBlockRenderer::renderHorseWhiteModel);
+        renderPiecePass(pose, be, buffer, packedLight, Piece.BLACK_KNIGHT, HORSE_BLACK_TEX, ChessBlockRenderer::renderHorseBlackModel);
         renderPiecePass(pose, be, buffer, packedLight, Piece.WHITE_BISHOP, BISHOP_WHITE_TEX, ChessBlockRenderer::renderBishopModel);
         renderPiecePass(pose, be, buffer, packedLight, Piece.BLACK_BISHOP, BISHOP_BLACK_TEX, ChessBlockRenderer::renderBishopModel);
         renderPiecePass(pose, be, buffer, packedLight, Piece.WHITE_QUEEN, QUEEN_WHITE_TEX, ChessBlockRenderer::renderQueenModel);
@@ -125,11 +125,11 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
             return;
         }
         if (p == Piece.WHITE_KNIGHT) {
-            renderHorseModel(pose, buffer.getBuffer(RenderType.entityCutoutNoCull(HORSE_WHITE_TEX)), cx, cz, scale, packedLight);
+            renderHorseWhiteModel(pose, buffer.getBuffer(RenderType.entityCutoutNoCull(HORSE_WHITE_TEX)), cx, cz, scale, packedLight);
             return;
         }
         if (p == Piece.BLACK_KNIGHT) {
-            renderHorseModel(pose, buffer.getBuffer(RenderType.entityCutoutNoCull(HORSE_BLACK_TEX)), cx, cz, scale, packedLight);
+            renderHorseBlackModel(pose, buffer.getBuffer(RenderType.entityCutoutNoCull(HORSE_BLACK_TEX)), cx, cz, scale, packedLight);
             return;
         }
         if (p == Piece.WHITE_BISHOP) {
@@ -241,48 +241,59 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
 
     private static void renderPawnModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
         renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * PAWN_MODEL_SCALE, ChessBlockbenchModelLoader.pawnModel(),
-                light);
+                light, false);
     }
 
     private static void renderTowerModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
         renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * TOWER_MODEL_SCALE, ChessBlockbenchModelLoader.towerModel(),
-                light);
+                light, false);
     }
 
-    private static void renderHorseModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
+    private static void renderHorseWhiteModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
         renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * HORSE_MODEL_SCALE, ChessBlockbenchModelLoader.horseModel(),
-                light);
+                light, true);
+    }
+
+    private static void renderHorseBlackModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * HORSE_MODEL_SCALE, ChessBlockbenchModelLoader.horseModel(),
+                light, false);
     }
 
     private static void renderBishopModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
         renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * BISHOP_MODEL_SCALE,
-                ChessBlockbenchModelLoader.bishopModel(), light);
+                ChessBlockbenchModelLoader.bishopModel(), light, false);
     }
 
     private static void renderQueenModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
         renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * QUEEN_MODEL_SCALE, ChessBlockbenchModelLoader.queenModel(),
-                light);
+                light, false);
     }
 
     private static void renderKingModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
         renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * KING_MODEL_SCALE, ChessBlockbenchModelLoader.kingModel(),
-                light);
+                light, false);
     }
 
     private static void renderTexturedPieceModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scaled,
-            ChessPieceModelData model, int light) {
+            ChessPieceModelData model, int light, boolean rotateY180) {
         float baseY = ChessBlock.BOARD_SURFACE_Y + 0.002f;
         for (ChessPieceModelData.TexturedElement e : model.elements()) {
-            drawTexturedElement(pose, consumer, cx, baseY, cz, scaled, e, light);
+            drawTexturedElement(pose, consumer, cx, baseY, cz, scaled, e, light, rotateY180);
         }
     }
 
     private static void drawTexturedElement(PoseStack.Pose pose, VertexConsumer consumer, float cx, float baseY, float cz, float scaled,
-            ChessPieceModelData.TexturedElement e, int light) {
+            ChessPieceModelData.TexturedElement e, int light, boolean rotateY180) {
         float fx = ((e.fromX - 8f) / 16f) * scaled;
         float tx = ((e.toX - 8f) / 16f) * scaled;
         float fz = ((e.fromZ - 8f) / 16f) * scaled;
         float tz = ((e.toZ - 8f) / 16f) * scaled;
+        if (rotateY180) {
+            fx = -fx;
+            tx = -tx;
+            fz = -fz;
+            tz = -tz;
+        }
         float minX = cx + Math.min(fx, tx);
         float maxX = cx + Math.max(fx, tx);
         float minY = baseY + (e.fromY / 16f) * scaled;
