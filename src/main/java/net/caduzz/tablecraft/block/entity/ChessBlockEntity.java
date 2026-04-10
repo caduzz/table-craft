@@ -12,6 +12,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.util.Mth;
+import javax.annotation.Nullable;
+
+import com.mojang.authlib.GameProfile;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -24,6 +27,7 @@ public class ChessBlockEntity extends BlockEntity {
     public static final long GAME_END_RESET_DELAY_TICKS = 100L;
     /** Duração da animação de movimento no cliente (mesma ideia das damas). */
     public static final float MOVE_DURATION_TICKS = 14.0f;
+
 
     public enum ChessGameStatus {
         PLAYING,
@@ -451,6 +455,49 @@ public class ChessBlockEntity extends BlockEntity {
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         readTag(tag);
+    }
+
+    public Player getWhitePlayer() {
+        if (level == null || gameSeatWhiteUuid == null) {
+            return null;
+        }
+        return level.getPlayerByUUID(gameSeatWhiteUuid);
+    }
+
+    public Player getBlackPlayer() {
+        if (level == null || gameSeatBlackUuid == null) {
+            return null;
+        }
+        return level.getPlayerByUUID(gameSeatBlackUuid);
+    }
+
+    /**
+     * Perfil para textura de skin na HUD (cliente): jogador carregado no nível ou perfil mínimo pelo assento.
+     */
+    @Nullable
+    public GameProfile getWhiteSeatGameProfile() {
+        if (gameSeatWhiteUuid == null) {
+            return null;
+        }
+        Player p = getWhitePlayer();
+        if (p != null) {
+            return p.getGameProfile();
+        }
+        String name = gameSeatWhiteName != null && !gameSeatWhiteName.isBlank() ? gameSeatWhiteName : "Player";
+        return new GameProfile(gameSeatWhiteUuid, name);
+    }
+
+    @Nullable
+    public GameProfile getBlackSeatGameProfile() {
+        if (gameSeatBlackUuid == null) {
+            return null;
+        }
+        Player p = getBlackPlayer();
+        if (p != null) {
+            return p.getGameProfile();
+        }
+        String name = gameSeatBlackName != null && !gameSeatBlackName.isBlank() ? gameSeatBlackName : "Player";
+        return new GameProfile(gameSeatBlackUuid, name);
     }
 
     private void writeTag(CompoundTag tag) {

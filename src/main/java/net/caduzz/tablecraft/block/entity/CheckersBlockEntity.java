@@ -3,12 +3,15 @@ package net.caduzz.tablecraft.block.entity;
 import java.util.Arrays;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
+
 import org.joml.Vector2d;
+
+import com.mojang.authlib.GameProfile;
 
 import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.CheckersBlock;
 import net.caduzz.tablecraft.block.CheckersMoveLogic;
-import net.caduzz.tablecraft.block.CheckersVictoryEffects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -156,17 +159,6 @@ public class CheckersBlockEntity extends BlockEntity {
         selRow = -1;
         selCol = -1;
         clearValidMoves();
-        if (outcome == CheckersGameStatus.WHITE_WIN) {
-            lastWinnerDisplayName = (gameSeatWhiteName != null && !gameSeatWhiteName.isEmpty()) ? gameSeatWhiteName : "Brancas";
-            if (level instanceof ServerLevel sl) {
-                CheckersVictoryEffects.spawnVictoryFireworks(sl, worldPosition, true);
-            }
-        } else {
-            lastWinnerDisplayName = (gameSeatBlackName != null && !gameSeatBlackName.isEmpty()) ? gameSeatBlackName : "Pretas";
-            if (level instanceof ServerLevel sl) {
-                CheckersVictoryEffects.spawnVictoryFireworks(sl, worldPosition, false);
-            }
-        }
         Component msg = outcome == CheckersGameStatus.WHITE_WIN
                 ? Component.literal("Branco venceu!")
                 : Component.literal("Preto venceu!");
@@ -261,9 +253,46 @@ public class CheckersBlockEntity extends BlockEntity {
         return gameSeatBlackName == null ? "" : gameSeatBlackName;
     }
 
-    /**
-     * Regista os dois primeiros jogadores diferentes que interagem de forma válida com a partida.
-     */
+    public Player getWhitePlayer() {
+        if (level == null || gameSeatWhiteUuid == null) {
+            return null;
+        }
+        return level.getPlayerByUUID(gameSeatWhiteUuid);
+    }
+
+    public Player getBlackPlayer() {
+        if (level == null || gameSeatBlackUuid == null) {
+            return null;
+        }
+        return level.getPlayerByUUID(gameSeatBlackUuid);
+    }
+
+    @Nullable
+    public GameProfile getWhiteSeatGameProfile() {
+        if (gameSeatWhiteUuid == null) {
+            return null;
+        }
+        Player p = getWhitePlayer();
+        if (p != null) {
+            return p.getGameProfile();
+        }
+        String name = gameSeatWhiteName != null && !gameSeatWhiteName.isBlank() ? gameSeatWhiteName : "Player";
+        return new GameProfile(gameSeatWhiteUuid, name);
+    }
+
+    @Nullable
+    public GameProfile getBlackSeatGameProfile() {
+        if (gameSeatBlackUuid == null) {
+            return null;
+        }
+        Player p = getBlackPlayer();
+        if (p != null) {
+            return p.getGameProfile();
+        }
+        String name = gameSeatBlackName != null && !gameSeatBlackName.isBlank() ? gameSeatBlackName : "Player";
+        return new GameProfile(gameSeatBlackUuid, name);
+    }
+
     /**
      * Com lugares já atribuídos, só o dono da cor da vez pode interagir.
      * Lugar ainda vazio = qualquer um (ex.: solo até registar o 2.º).

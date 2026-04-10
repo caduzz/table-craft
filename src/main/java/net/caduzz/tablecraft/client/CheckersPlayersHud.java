@@ -1,7 +1,6 @@
 package net.caduzz.tablecraft.client;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-
+import com.mojang.authlib.GameProfile;
 import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.ModBlocks;
 import net.caduzz.tablecraft.block.entity.CheckersBlockEntity;
@@ -18,72 +17,130 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 
-/**
- * HUD para os dois primeiros jogadores registados: brancas / pretas, só visível para eles ao mirar no tabuleiro.
- */
 @EventBusSubscriber(modid = TableCraft.MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
 public final class CheckersPlayersHud {
 
-    private CheckersPlayersHud() {
+    private CheckersPlayersHud() {}
+
+    private static void drawPlayerHead(GuiGraphics gui, Minecraft mc, int x, int y, int size, GameProfile profile) {
+        if (profile == null) return;
+
+        ResourceLocation skin = mc.getSkinManager().getInsecureSkin(profile).texture();
+
+        gui.pose().pushPose();
+        gui.pose().translate(x, y, 0);
+
+        float scale = size / 8.0f;
+        gui.pose().scale(scale, scale, 1.0f);
+
+        // cabeça
+        gui.blit(skin, 0, 0, 8, 8, 8, 8, 64, 64);
+        // camada extra
+        gui.blit(skin, 0, 0, 40, 8, 8, 8, 64, 64);
+
+        gui.pose().popPose();
+
+        // frame da cabeça
+        gui.fill(x - 1, y - 1, x + size + 1, y, 0xFF000000);
+        gui.fill(x - 1, y + size, x + size + 1, y + size + 1, 0xFF000000);
+        gui.fill(x - 1, y, x, y + size, 0xFF000000);
+        gui.fill(x + size, y, x + size + 1, y + size, 0xFF000000);
     }
 
     @SubscribeEvent
     public static void onRegisterGuiLayers(RegisterGuiLayersEvent event) {
         event.registerAboveAll(
-                ResourceLocation.fromNamespaceAndPath(TableCraft.MOD_ID, "checkers_players_hud"),
-                new LayeredDraw.Layer() {
-                    @Override
-                    public void render(GuiGraphics gui, DeltaTracker deltaTracker) {
-                        Minecraft mc = Minecraft.getInstance();
-                        if (mc.player == null || mc.level == null || mc.options.hideGui) {
-                            return;
-                        }
-                        HitResult hit = mc.hitResult;
-                        if (!(hit instanceof BlockHitResult bhr) || hit.getType() != HitResult.Type.BLOCK) {
-                            return;
-                        }
-                        if (!mc.level.getBlockState(bhr.getBlockPos()).is(ModBlocks.CHECKERS_BLOCK.get())) {
-                            return;
-                        }
-                        BlockEntity be = mc.level.getBlockEntity(bhr.getBlockPos());
-                        if (!(be instanceof CheckersBlockEntity checkers)) {
-                            return;
-                        }
-                        if (!checkers.isRegisteredParticipant(mc.player.getUUID())) {
-                            return;
-                        }
-                        if (!checkers.hasGameSeatWhite() && !checkers.hasGameSeatBlack()) {
-                            return;
-                        }
+            ResourceLocation.fromNamespaceAndPath(TableCraft.MOD_ID, "checkers_players_hud"),
+            new LayeredDraw.Layer() {
 
-                        int sw = mc.getWindow().getGuiScaledWidth();
-                        int panelW = 220;
-                        int panelH = 48;
-                        int x = (sw - panelW) / 2;
-                        int y = 8;
+                @Override
+                public void render(GuiGraphics gui, DeltaTracker deltaTracker) {
 
-                        String turnStr = checkers.isWhiteTurn() ? checkers.getGameSeatWhiteName() : checkers.getGameSeatBlackName();
-                        String wName = checkers.hasGameSeatWhite() ? checkers.getGameSeatWhiteName() : "—";
-                        String bName = checkers.hasGameSeatBlack() ? checkers.getGameSeatBlackName() : "—";
+                    Minecraft mc = Minecraft.getInstance();
 
-                        if (turnStr.isEmpty()) {
-                            turnStr = "—";
-                        }
+                    if (mc.player == null || mc.level == null || mc.options.hideGui) return;
 
-                        RenderSystem.enableBlend();
-                        gui.fill(x, y, x + panelW, y + panelH, 0xD0101018);
+                    HitResult hit = mc.hitResult;
+                    if (!(hit instanceof BlockHitResult bhr) || hit.getType() != HitResult.Type.BLOCK) return;
 
-                        gui.drawString(mc.font, "Damas — mesa", x + 8, y + 6, 0xFFFFFF, true);
-                            
-                        String rightText = "Turno: " + turnStr;
-                        int rightX = x + panelW - mc.font.width(rightText) - 8;
-                        gui.drawString(mc.font, rightText, rightX, y + 6, 0xE0E0E0, true);
+                    if (!mc.level.getBlockState(bhr.getBlockPos()).is(ModBlocks.CHECKERS_BLOCK.get())) return;
 
-                        gui.drawString(mc.font, "Brancas: " + wName, x + 8, y + 32, 0xE0E0E0, false);
-                        gui.drawString(mc.font, "Pretas: " + bName, x + panelW - mc.font.width("Pretas: " + bName) - 8, y + 32, 0xB0B0B0, false);
+                    BlockEntity be = mc.level.getBlockEntity(bhr.getBlockPos());
+                    if (!(be instanceof CheckersBlockEntity checkers) || !checkers.isRegisteredParticipant(mc.player.getUUID())) return;
 
-                        RenderSystem.disableBlend();
+                    int screenWidth = mc.getWindow().getGuiScaledWidth();
+
+                    int panelW = BoardPlayersHudMetrics.PANEL_W;
+                    int panelH = BoardPlayersHudMetrics.panelHeight(mc);
+
+                    BoardPlayersHudLayout.Result lay = BoardPlayersHudLayout.layout(mc, panelW, panelH);
+                    int leftX = lay.leftX();
+                    int rightX = lay.rightX();
+                    int y = lay.panelTopY();
+                    int pad = BoardPlayersHudMetrics.PAD;
+                    int headY = BoardPlayersHudMetrics.headY(y, mc);
+
+                    boolean whiteTurn = checkers.isWhiteTurn();
+                    boolean blackTurn = !whiteTurn;
+
+                    int whiteColor = whiteTurn ? 0xFFFFFFAA : 0xFFCCCCCC;
+                    int blackColor = blackTurn ? 0xFFFFFFAA : 0xFFCCCCCC;
+
+                    // ===== BRANCAS =====
+                    gui.fill(leftX, y, leftX + panelW, y + panelH, 0xC0101010);
+
+                    // bordas
+                    gui.fill(leftX, y, leftX + panelW, y + 1, 0xFF555555);
+                    gui.fill(leftX, y + panelH - 1, leftX + panelW, y + panelH, 0xFF222222);
+
+                    // highlight turno
+                    if (whiteTurn) {
+                        gui.fill(leftX, y, leftX + panelW, y + panelH, 0x20FFFFFF);
                     }
-                });
+
+                    gui.drawString(mc.font, "Brancas", leftX + pad, BoardPlayersHudMetrics.titleY(y), whiteColor, true);
+
+                    if (checkers.hasGameSeatWhite()) {
+                        drawPlayerHead(gui, mc, leftX + pad, headY, BoardPlayersHudMetrics.HEAD_SIZE, checkers.getWhiteSeatGameProfile());
+                    }
+
+                    String whiteName = checkers.hasGameSeatWhite() ? checkers.getGameSeatWhiteName() : "—";
+                    gui.drawString(mc.font, whiteName, leftX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
+                            BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
+
+                    // ===== PRETAS =====
+                    gui.fill(rightX, y, rightX + panelW, y + panelH, 0xC0101010);
+
+                    gui.fill(rightX, y, rightX + panelW, y + 1, 0xFF555555);
+                    gui.fill(rightX, y + panelH - 1, rightX + panelW, y + panelH, 0xFF222222);
+
+                    if (blackTurn) {
+                        gui.fill(rightX, y, rightX + panelW, y + panelH, 0x20FFFFFF);
+                    }
+
+                    gui.drawString(mc.font, "Pretas", rightX + pad, BoardPlayersHudMetrics.titleY(y), blackColor, true);
+
+                    if (checkers.hasGameSeatBlack()) {
+                        drawPlayerHead(gui, mc, rightX + pad, headY, BoardPlayersHudMetrics.HEAD_SIZE, checkers.getBlackSeatGameProfile());
+                    }
+
+                    String blackName = checkers.hasGameSeatBlack() ? checkers.getGameSeatBlackName() : "—";
+                    gui.drawString(mc.font, blackName, rightX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
+                            BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
+
+                    // ===== TEXTO CENTRAL =====
+                    String turnText = checkers.isWhiteTurn() ? "Brancas jogam" : "Pretas jogam";
+
+                    gui.drawString(
+                        mc.font,
+                        turnText,
+                        (screenWidth / 2) - (mc.font.width(turnText) / 2),
+                        lay.turnTextY(),
+                        0xFFFFFF,
+                        true
+                    );
+                }
+            }
+        );
     }
 }
