@@ -80,6 +80,10 @@ public class ChessBlockEntity extends BlockEntity {
     private int animToCol;
     private Piece animPiece = Piece.EMPTY;
     private long animStartGameTime = -1L;
+    private int lastMoveFromRow = -1;
+    private int lastMoveFromCol = -1;
+    private int lastMoveToRow = -1;
+    private int lastMoveToCol = -1;
 
     public ChessBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.CHESS.get(), pos, state);
@@ -126,6 +130,7 @@ public class ChessBlockEntity extends BlockEntity {
         validMoveCount = 0;
         gameStatus = ChessGameStatus.PLAYING;
         resetAtGameTime = -1L;
+        clearLastMoveMarker();
         gameSeatWhiteUuid = null;
         gameSeatWhiteName = "";
         gameSeatBlackUuid = null;
@@ -257,10 +262,13 @@ public class ChessBlockEntity extends BlockEntity {
     private void finishAnimatedMove() {
         int tr = animToRow;
         int tc = animToCol;
+        int fr = animFromRow;
+        int fc = animFromCol;
         Piece moving = animPiece;
         Piece placed = promoteIfNeeded(moving, tr);
         board[tr][tc] = placed;
         clearAnimation();
+        setLastMoveMarker(fr, fc, tr, tc);
 
         whiteTurn = !whiteTurn;
         if (!ChessMoveLogic.currentPlayerHasAnyMove(board, whiteTurn)) {
@@ -448,6 +456,20 @@ public class ChessBlockEntity extends BlockEntity {
         blockedByCheckMoveCount = 0;
     }
 
+    private void setLastMoveMarker(int fromRow, int fromCol, int toRow, int toCol) {
+        lastMoveFromRow = fromRow;
+        lastMoveFromCol = fromCol;
+        lastMoveToRow = toRow;
+        lastMoveToCol = toCol;
+    }
+
+    private void clearLastMoveMarker() {
+        lastMoveFromRow = -1;
+        lastMoveFromCol = -1;
+        lastMoveToRow = -1;
+        lastMoveToCol = -1;
+    }
+
     private void syncToClients() {
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_ALL);
@@ -505,6 +527,26 @@ public class ChessBlockEntity extends BlockEntity {
             return 0;
         }
         return blockedByCheckMovesBuf[index];
+    }
+
+    public boolean hasLastMoveMarker() {
+        return lastMoveFromRow >= 0 && lastMoveFromCol >= 0 && lastMoveToRow >= 0 && lastMoveToCol >= 0;
+    }
+
+    public int getLastMoveFromRow() {
+        return lastMoveFromRow;
+    }
+
+    public int getLastMoveFromCol() {
+        return lastMoveFromCol;
+    }
+
+    public int getLastMoveToRow() {
+        return lastMoveToRow;
+    }
+
+    public int getLastMoveToCol() {
+        return lastMoveToCol;
     }
 
     public boolean isGameInProgress() {
@@ -654,6 +696,13 @@ public class ChessBlockEntity extends BlockEntity {
             tag.putInt("AnimPiece", animPiece.ordinal());
             tag.putLong("AnimStart", animStartGameTime);
         }
+        tag.putBoolean("LastMoveActive", hasLastMoveMarker());
+        if (hasLastMoveMarker()) {
+            tag.putInt("LastMoveFromR", lastMoveFromRow);
+            tag.putInt("LastMoveFromC", lastMoveFromCol);
+            tag.putInt("LastMoveToR", lastMoveToRow);
+            tag.putInt("LastMoveToC", lastMoveToCol);
+        }
     }
 
     private void readTag(CompoundTag tag) {
@@ -719,6 +768,14 @@ public class ChessBlockEntity extends BlockEntity {
             animStartGameTime = tag.getLong("AnimStart");
         } else {
             clearAnimation();
+        }
+        if (tag.getBoolean("LastMoveActive")) {
+            lastMoveFromRow = tag.getInt("LastMoveFromR");
+            lastMoveFromCol = tag.getInt("LastMoveFromC");
+            lastMoveToRow = tag.getInt("LastMoveToR");
+            lastMoveToCol = tag.getInt("LastMoveToC");
+        } else {
+            clearLastMoveMarker();
         }
     }
 }

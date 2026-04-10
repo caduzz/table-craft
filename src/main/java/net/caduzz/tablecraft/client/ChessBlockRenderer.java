@@ -64,6 +64,10 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         ChessBlock.applyBoardRenderRotation(poseStack, be.getBlockState().getValue(ChessBlock.FACING));
 
         VertexConsumer translucent = buffer.getBuffer(RenderType.entityTranslucent(WHITE_TEX));
+        if (be.hasLastMoveMarker()) {
+            drawPreviousMoveOverlay(poseStack.last(), translucent, be.getLastMoveFromRow(), be.getLastMoveFromCol(), packedLight);
+            drawPreviousMoveOverlay(poseStack.last(), translucent, be.getLastMoveToRow(), be.getLastMoveToCol(), packedLight);
+        }
         for (int i = 0; i < be.getValidMoveCount(); i++) {
             int packed = be.getValidMovePacked(i);
             if (!isPackedInCaptureMoves(be, packed)) {
@@ -388,6 +392,19 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         vertexT(consumer, mat, pose, light, 255, 60, 60, 130, maxX, y, minZ, 0, 1, 0);
         vertexT(consumer, mat, pose, light, 255, 60, 60, 130, maxX, y, maxZ, 0, 1, 0);
         vertexT(consumer, mat, pose, light, 255, 60, 60, 130, minX, y, maxZ, 0, 1, 0);
+    }
+
+    private static void drawPreviousMoveOverlay(PoseStack.Pose pose, VertexConsumer consumer, int row, int col, int light) {
+        float minX = col * CELL + CELL_INSET;
+        float maxX = (col + 1) * CELL - CELL_INSET;
+        float minZ = row * CELL + CELL_INSET;
+        float maxZ = (row + 1) * CELL - CELL_INSET;
+        Matrix4f mat = pose.pose();
+        float y = OVERLAY_Y + 0.0001f;
+        vertexT(consumer, mat, pose, light, 160, 80, 255, 105, minX, y, minZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 160, 80, 255, 105, maxX, y, minZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 160, 80, 255, 105, maxX, y, maxZ, 0, 1, 0);
+        vertexT(consumer, mat, pose, light, 160, 80, 255, 105, minX, y, maxZ, 0, 1, 0);
     }
 
     private static boolean isPackedInCaptureMoves(ChessBlockEntity be, int packed) {
