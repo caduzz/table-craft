@@ -16,18 +16,18 @@ import net.minecraft.util.Mth;
 
 public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockEntity> {
     private static final ResourceLocation WHITE_TEX = ResourceLocation.withDefaultNamespace("textures/misc/white.png");
-    private static final ResourceLocation PAWN_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/pawn_white.png");
-    private static final ResourceLocation PAWN_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/pawn_black.png");
-    private static final ResourceLocation TOWER_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/tower_white.png");
-    private static final ResourceLocation TOWER_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/tower_black.png");
-    private static final ResourceLocation HORSE_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/horse_white.png");
-    private static final ResourceLocation HORSE_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/horse_black.png");
-    private static final ResourceLocation BISHOP_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/bishop_white.png");
-    private static final ResourceLocation BISHOP_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/bishop_black.png");
-    private static final ResourceLocation QUEEN_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/queen_white.png");
-    private static final ResourceLocation QUEEN_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/queen_black.png");
-    private static final ResourceLocation KING_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/king_white.png");
-    private static final ResourceLocation KING_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/king_black.png");
+    private static final ResourceLocation PAWN_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_white.png");
+    private static final ResourceLocation PAWN_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_black.png");
+    private static final ResourceLocation TOWER_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_white.png");
+    private static final ResourceLocation TOWER_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_black.png");
+    private static final ResourceLocation HORSE_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_white.png");
+    private static final ResourceLocation HORSE_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_black.png");
+    private static final ResourceLocation BISHOP_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_white.png");
+    private static final ResourceLocation BISHOP_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_black.png");
+    private static final ResourceLocation QUEEN_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_white.png");
+    private static final ResourceLocation QUEEN_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_black.png");
+    private static final ResourceLocation KING_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_white.png");
+    private static final ResourceLocation KING_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/chess_black.png");
     /** Escala base global das peças de xadrez no tabuleiro. */
     private static final float CHESS_PIECE_BASE_SCALE = 1.25f;
     /**
