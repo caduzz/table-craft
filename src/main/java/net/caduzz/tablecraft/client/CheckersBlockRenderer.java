@@ -22,8 +22,10 @@ public final class CheckersBlockRenderer implements BlockEntityRenderer<Checkers
     private static final ResourceLocation WHITE_TEX = ResourceLocation.withDefaultNamespace("textures/misc/white.png");
     private static final float CELL = 1f / 8f;
     private static final float TEXEL_WORLD = 1f / 16f;
+    /** Escala base das peças de damas no tabuleiro. */
+    private static final float PIECE_BASE_SCALE = 1.25f;
     /** Raio no plano XZ (peça “larga”). */
-    private static final float HALF_W = 0.9f * TEXEL_WORLD * 0.5f;
+    private static final float HALF_W = PIECE_BASE_SCALE * TEXEL_WORLD * 0.5f;
     /** Meia-altura menor → perfil retangular / ficha baixa. */
     private static final float HALF_H = HALF_W * 0.32f;
     /** Topo da base de madeira (face do tabuleiro) — igual a {@link CheckersBlock#BOARD_SURFACE_Y}. */

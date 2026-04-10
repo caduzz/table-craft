@@ -28,6 +28,8 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
     private static final ResourceLocation QUEEN_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/queen_black.png");
     private static final ResourceLocation KING_WHITE_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/king_white.png");
     private static final ResourceLocation KING_BLACK_TEX = ResourceLocation.fromNamespaceAndPath("tablecraft", "textures/block/king_black.png");
+    /** Escala base global das peças de xadrez no tabuleiro. */
+    private static final float CHESS_PIECE_BASE_SCALE = 1.25f;
     /**
      * Modelo do pawn tem base de ~6 pixels no JSON; reduzimos para ~0.9 pixel no mundo.
      */
@@ -157,7 +159,7 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         if (p != Piece.EMPTY) {
             float h = pieceHeight(p);
             float cy = ChessBlock.BOARD_SURFACE_Y + h + 0.002f;
-            float halfW = CELL * 0.28f * scale;
+            float halfW = CELL * 0.28f * CHESS_PIECE_BASE_SCALE * scale;
             int rgbPacked = chessFallbackRgbPacked(p);
             VertexConsumer consumer = buffer.getBuffer(RenderType.entityCutoutNoCull(WHITE_TEX));
             drawBox(pose, consumer, cx, cy, cz, halfW, h * scale, (rgbPacked >> 16) & 0xFF, (rgbPacked >> 8) & 0xFF, rgbPacked & 0xFF, 255,
@@ -211,7 +213,7 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
                 float scale = selectionScale(be, r, c);
                 float h = pieceHeight(p);
                 float cy = ChessBlock.BOARD_SURFACE_Y + h + 0.002f;
-                float halfW = CELL * 0.28f * scale;
+                float halfW = CELL * 0.28f * CHESS_PIECE_BASE_SCALE * scale;
                 int rgbPacked = chessFallbackRgbPacked(p);
                 drawBox(pose, consumer, cx, cy, cz, halfW, h * scale, (rgbPacked >> 16) & 0xFF, (rgbPacked >> 8) & 0xFF, rgbPacked & 0xFF, 255,
                         packedLight);
@@ -221,11 +223,11 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
 
     private static float pieceHeight(Piece p) {
         return switch (p) {
-            case WHITE_PAWN, BLACK_PAWN -> CELL * 0.13f;
-            case WHITE_ROOK, BLACK_ROOK, WHITE_KNIGHT, BLACK_KNIGHT, WHITE_BISHOP, BLACK_BISHOP -> CELL * 0.17f;
-            case WHITE_QUEEN, BLACK_QUEEN -> CELL * 0.20f;
-            case WHITE_KING, BLACK_KING -> CELL * 0.22f;
-            default -> CELL * 0.14f;
+            case WHITE_PAWN, BLACK_PAWN -> CELL * 0.13f * CHESS_PIECE_BASE_SCALE;
+            case WHITE_ROOK, BLACK_ROOK, WHITE_KNIGHT, BLACK_KNIGHT, WHITE_BISHOP, BLACK_BISHOP -> CELL * 0.17f * CHESS_PIECE_BASE_SCALE;
+            case WHITE_QUEEN, BLACK_QUEEN -> CELL * 0.20f * CHESS_PIECE_BASE_SCALE;
+            case WHITE_KING, BLACK_KING -> CELL * 0.22f * CHESS_PIECE_BASE_SCALE;
+            default -> CELL * 0.14f * CHESS_PIECE_BASE_SCALE;
         };
     }
 
@@ -238,27 +240,33 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
     }
 
     private static void renderPawnModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
-        renderTexturedPieceModel(pose, consumer, cx, cz, scale * PAWN_MODEL_SCALE, ChessBlockbenchModelLoader.pawnModel(), light);
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * PAWN_MODEL_SCALE, ChessBlockbenchModelLoader.pawnModel(),
+                light);
     }
 
     private static void renderTowerModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
-        renderTexturedPieceModel(pose, consumer, cx, cz, scale * TOWER_MODEL_SCALE, ChessBlockbenchModelLoader.towerModel(), light);
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * TOWER_MODEL_SCALE, ChessBlockbenchModelLoader.towerModel(),
+                light);
     }
 
     private static void renderHorseModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
-        renderTexturedPieceModel(pose, consumer, cx, cz, scale * HORSE_MODEL_SCALE, ChessBlockbenchModelLoader.horseModel(), light);
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * HORSE_MODEL_SCALE, ChessBlockbenchModelLoader.horseModel(),
+                light);
     }
 
     private static void renderBishopModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
-        renderTexturedPieceModel(pose, consumer, cx, cz, scale * BISHOP_MODEL_SCALE, ChessBlockbenchModelLoader.bishopModel(), light);
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * BISHOP_MODEL_SCALE,
+                ChessBlockbenchModelLoader.bishopModel(), light);
     }
 
     private static void renderQueenModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
-        renderTexturedPieceModel(pose, consumer, cx, cz, scale * QUEEN_MODEL_SCALE, ChessBlockbenchModelLoader.queenModel(), light);
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * QUEEN_MODEL_SCALE, ChessBlockbenchModelLoader.queenModel(),
+                light);
     }
 
     private static void renderKingModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scale, int light) {
-        renderTexturedPieceModel(pose, consumer, cx, cz, scale * KING_MODEL_SCALE, ChessBlockbenchModelLoader.kingModel(), light);
+        renderTexturedPieceModel(pose, consumer, cx, cz, CHESS_PIECE_BASE_SCALE * scale * KING_MODEL_SCALE, ChessBlockbenchModelLoader.kingModel(),
+                light);
     }
 
     private static void renderTexturedPieceModel(PoseStack.Pose pose, VertexConsumer consumer, float cx, float cz, float scaled,
