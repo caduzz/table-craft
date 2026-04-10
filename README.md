@@ -15,7 +15,7 @@
 ![Tabuleiro de Xadrez](https://imgur.com/qdB8fmB.png)
 
 ### Interface e HUD Singleplayer
-![HUD](https://imgur.com/MFh9swZ.png)
+![HUD](https://imgur.com/JcKUVnd.png)
 
 ### Tabuleiro De Xadrez Multplayer
 ![Tabuleiro de Xadrez](https://imgur.com/PvpDLzH.png)
