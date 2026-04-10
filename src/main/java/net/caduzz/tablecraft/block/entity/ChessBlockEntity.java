@@ -72,6 +72,10 @@ public class ChessBlockEntity extends BlockEntity {
     private int whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
     private int blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
     private int playerTimePresetIndex = BoardGameClockConfig.closestPresetIndexFromTicks(BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS);
+    /** Realce das casas do último movimento (sincronizado; todos veem o mesmo). */
+    private boolean showPreviousMove = true;
+    /** Indicadores de jogadas legais / captura / bloqueio por xeque no tabuleiro. */
+    private boolean showLegalMoveHints = true;
 
     /** Origem/destino vazios no tabuleiro até o fim da animação; a peça é desenhada só no cliente interpolando. */
     private int animFromRow;
@@ -364,6 +368,56 @@ public class ChessBlockEntity extends BlockEntity {
         player.displayClientMessage(Component.literal("Tempo da mesa: " + minutes + " min por jogador"), true);
         setChanged();
         syncToClients();
+    }
+
+    public boolean showsPreviousMove() {
+        return showPreviousMove;
+    }
+
+    public boolean showsLegalMoveHints() {
+        return showLegalMoveHints;
+    }
+
+    public int getPlayerTimePresetIndex() {
+        return playerTimePresetIndex;
+    }
+
+    public void toggleShowPreviousMove() {
+        showPreviousMove = !showPreviousMove;
+        setChanged();
+        syncToClients();
+    }
+
+    public void toggleShowLegalMoveHints() {
+        showLegalMoveHints = !showLegalMoveHints;
+        setChanged();
+        syncToClients();
+    }
+
+    /**
+     * Ajusta o preset de tempo (menu). Mesmas regras que {@link #cyclePlayerTimePreset}: só antes de ambos assentos ocupados.
+     */
+    public void adjustTimePresetFromMenu(Player player, int delta) {
+        if (gameStatus != ChessGameStatus.PLAYING || hasGameSeatWhite() || hasGameSeatBlack()) {
+            player.displayClientMessage(Component.literal("Altere o tempo antes de iniciar a partida."), true);
+            return;
+        }
+        int n = BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS.length;
+        playerTimePresetIndex = ((playerTimePresetIndex + delta) % n + n) % n;
+        resetGameClock();
+        setChanged();
+        syncToClients();
+    }
+
+    public void resetFromMenu(Player player) {
+        if (hasActiveAnimation()) {
+            player.displayClientMessage(Component.literal("Aguarde o movimento terminar para reiniciar."), true);
+            return;
+        }
+        resetToStartingPosition();
+        setChanged();
+        syncToClients();
+        player.displayClientMessage(Component.literal("Mesa de xadrez reiniciada."), true);
     }
 
     private boolean bothGameSeatsOccupied() {
@@ -687,6 +741,8 @@ public class ChessBlockEntity extends BlockEntity {
         tag.putInt("ClockWhiteTicks", whiteClockTicks);
         tag.putInt("ClockBlackTicks", blackClockTicks);
         tag.putInt("ClockPresetIndex", playerTimePresetIndex);
+        tag.putBoolean("ShowPreviousMove", showPreviousMove);
+        tag.putBoolean("ShowLegalHints", showLegalMoveHints);
         tag.putBoolean("AnimActive", hasActiveAnimation());
         if (hasActiveAnimation()) {
             tag.putInt("AnimFromR", animFromRow);
@@ -757,6 +813,8 @@ public class ChessBlockEntity extends BlockEntity {
             presetIndex = BoardGameClockConfig.closestPresetIndexFromTicks(whiteClockTicks);
         }
         playerTimePresetIndex = presetIndex;
+        showPreviousMove = !tag.contains("ShowPreviousMove") || tag.getBoolean("ShowPreviousMove");
+        showLegalMoveHints = !tag.contains("ShowLegalHints") || tag.getBoolean("ShowLegalHints");
         if (tag.getBoolean("AnimActive")) {
             animFromRow = tag.getInt("AnimFromR");
             animFromCol = tag.getInt("AnimFromC");

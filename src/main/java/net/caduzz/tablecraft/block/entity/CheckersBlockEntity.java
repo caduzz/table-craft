@@ -82,6 +82,8 @@ public class CheckersBlockEntity extends BlockEntity {
     private int whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
     private int blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
     private int playerTimePresetIndex = BoardGameClockConfig.closestPresetIndexFromTicks(BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS);
+    /** Overlays verdes de casas válidas no tabuleiro. */
+    private boolean showLegalMoveHints = true;
 
     public CheckersBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.CHECKERS.get(), pos, state);
@@ -373,6 +375,43 @@ public class CheckersBlockEntity extends BlockEntity {
         player.displayClientMessage(Component.literal("Tempo da mesa: " + minutes + " min por jogador"), true);
         setChanged();
         syncToClients();
+    }
+
+    public boolean showsLegalMoveHints() {
+        return showLegalMoveHints;
+    }
+
+    public int getPlayerTimePresetIndex() {
+        return playerTimePresetIndex;
+    }
+
+    public void toggleShowLegalMoveHints() {
+        showLegalMoveHints = !showLegalMoveHints;
+        setChanged();
+        syncToClients();
+    }
+
+    public void adjustTimePresetFromMenu(Player player, int delta) {
+        if (gameStatus != CheckersGameStatus.PLAYING || hasGameSeatWhite() || hasGameSeatBlack()) {
+            player.displayClientMessage(Component.literal("Altere o tempo antes de iniciar a partida."), true);
+            return;
+        }
+        int n = BoardGameClockConfig.PLAYER_TIME_MINUTES_OPTIONS.length;
+        playerTimePresetIndex = ((playerTimePresetIndex + delta) % n + n) % n;
+        resetGameClock();
+        setChanged();
+        syncToClients();
+    }
+
+    public void resetFromMenu(Player player) {
+        if (hasActiveAnimation()) {
+            player.displayClientMessage(Component.literal("Aguarde o movimento terminar para reiniciar."), true);
+            return;
+        }
+        resetToStartingPosition();
+        setChanged();
+        syncToClients();
+        player.displayClientMessage(Component.literal("Mesa de damas reiniciada."), true);
     }
 
     private boolean bothGameSeatsOccupied() {
@@ -725,6 +764,7 @@ public class CheckersBlockEntity extends BlockEntity {
         tag.putInt("ClockWhiteTicks", whiteClockTicks);
         tag.putInt("ClockBlackTicks", blackClockTicks);
         tag.putInt("ClockPresetIndex", playerTimePresetIndex);
+        tag.putBoolean("ShowLegalHints", showLegalMoveHints);
     }
 
     private void readCommonTag(CompoundTag tag) {
@@ -762,6 +802,7 @@ public class CheckersBlockEntity extends BlockEntity {
             presetIndex = BoardGameClockConfig.closestPresetIndexFromTicks(whiteClockTicks);
         }
         playerTimePresetIndex = presetIndex;
+        showLegalMoveHints = !tag.contains("ShowLegalHints") || tag.getBoolean("ShowLegalHints");
         if (tag.getBoolean("AnimActive")) {
             animFromRow = tag.getInt("AnimFromR");
             animFromCol = tag.getInt("AnimFromC");

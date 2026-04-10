@@ -161,7 +161,6 @@ public class CheckersBlock extends BaseEntityBlock {
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof CheckersBlockEntity checkers) {
             if (player.isShiftKeyDown()) {
-                checkers.cyclePlayerTimePreset(player);
                 return ItemInteractionResult.CONSUME;
             }
             checkers.handlePlayerClick(player, hitResult);
@@ -183,7 +182,6 @@ public class CheckersBlock extends BaseEntityBlock {
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof CheckersBlockEntity checkers) {
             if (player.isShiftKeyDown()) {
-                checkers.cyclePlayerTimePreset(player);
                 return InteractionResult.CONSUME;
             }
             checkers.handlePlayerClick(player, hitResult);

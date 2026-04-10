@@ -51,11 +51,13 @@ public final class CheckersBlockRenderer implements BlockEntityRenderer<Checkers
         CheckersBlock.applyBoardRenderRotation(poseStack, be.getBlockState().getValue(CheckersBlock.FACING));
 
         VertexConsumer translucent = buffer.getBuffer(RenderType.entityTranslucent(WHITE_TEX));
-        for (int i = 0; i < be.getValidMoveCount(); i++) {
-            int packed = be.getValidMovePacked(i);
-            int tr = packed / 8;
-            int tc = packed % 8;
-            drawValidCellOverlay(poseStack.last(), translucent, tr, tc, packedLight);
+        if (be.showsLegalMoveHints()) {
+            for (int i = 0; i < be.getValidMoveCount(); i++) {
+                int packed = be.getValidMovePacked(i);
+                int tr = packed / 8;
+                int tc = packed % 8;
+                drawValidCellOverlay(poseStack.last(), translucent, tr, tc, packedLight);
+            }
         }
 
         VertexConsumer consumer = buffer.getBuffer(RenderType.entityCutoutNoCull(WHITE_TEX));

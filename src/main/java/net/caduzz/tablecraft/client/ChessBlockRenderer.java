@@ -64,23 +64,25 @@ public final class ChessBlockRenderer implements BlockEntityRenderer<ChessBlockE
         ChessBlock.applyBoardRenderRotation(poseStack, be.getBlockState().getValue(ChessBlock.FACING));
 
         VertexConsumer translucent = buffer.getBuffer(RenderType.entityTranslucent(WHITE_TEX));
-        if (be.hasLastMoveMarker()) {
+        if (be.showsPreviousMove() && be.hasLastMoveMarker()) {
             drawPreviousMoveOverlay(poseStack.last(), translucent, be.getLastMoveFromRow(), be.getLastMoveFromCol(), packedLight);
             drawPreviousMoveOverlay(poseStack.last(), translucent, be.getLastMoveToRow(), be.getLastMoveToCol(), packedLight);
         }
-        for (int i = 0; i < be.getValidMoveCount(); i++) {
-            int packed = be.getValidMovePacked(i);
-            if (!isPackedInCaptureMoves(be, packed)) {
-                drawValidCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+        if (be.showsLegalMoveHints()) {
+            for (int i = 0; i < be.getValidMoveCount(); i++) {
+                int packed = be.getValidMovePacked(i);
+                if (!isPackedInCaptureMoves(be, packed)) {
+                    drawValidCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+                }
             }
-        }
-        for (int i = 0; i < be.getCaptureMoveCount(); i++) {
-            int packed = be.getCaptureMovePacked(i);
-            drawCaptureCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
-        }
-        for (int i = 0; i < be.getBlockedByCheckMoveCount(); i++) {
-            int packed = be.getBlockedByCheckMovePacked(i);
-            drawBlockedByCheckOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+            for (int i = 0; i < be.getCaptureMoveCount(); i++) {
+                int packed = be.getCaptureMovePacked(i);
+                drawCaptureCellOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+            }
+            for (int i = 0; i < be.getBlockedByCheckMoveCount(); i++) {
+                int packed = be.getBlockedByCheckMovePacked(i);
+                drawBlockedByCheckOverlay(poseStack.last(), translucent, packed / 8, packed % 8, packedLight);
+            }
         }
 
         /*
