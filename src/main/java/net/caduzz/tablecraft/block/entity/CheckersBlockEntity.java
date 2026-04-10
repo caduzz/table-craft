@@ -12,6 +12,7 @@ import com.mojang.authlib.GameProfile;
 import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.CheckersBlock;
 import net.caduzz.tablecraft.block.CheckersMoveLogic;
+import net.caduzz.tablecraft.game.BoardGameClockConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -78,6 +79,8 @@ public class CheckersBlockEntity extends BlockEntity {
 
     /** Nome exibido na vitória (participante do lado vencedor). */
     private String lastWinnerDisplayName = "";
+    private int whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+    private int blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
 
     public CheckersBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlockEntities.CHECKERS.get(), pos, state);
@@ -98,6 +101,9 @@ public class CheckersBlockEntity extends BlockEntity {
                 && level.getGameTime() >= resetAtGameTime) {
             performAutoResetAfterGameEnd();
             return;
+        }
+        if (gameStatus == CheckersGameStatus.PLAYING) {
+            tickGameClock();
         }
         if (gameStatus != CheckersGameStatus.PLAYING) {
             return;
@@ -154,14 +160,24 @@ public class CheckersBlockEntity extends BlockEntity {
     }
 
     private void endGame(CheckersGameStatus outcome) {
+        endGame(outcome, null);
+    }
+
+    private void endGame(CheckersGameStatus outcome, @Nullable Component announceOverride) {
         gameStatus = outcome;
         resetAtGameTime = level.getGameTime() + GAME_END_RESET_DELAY_TICKS;
         selRow = -1;
         selCol = -1;
         clearValidMoves();
-        Component msg = outcome == CheckersGameStatus.WHITE_WIN
-                ? Component.literal("Branco venceu!")
-                : Component.literal("Preto venceu!");
+        if (outcome == CheckersGameStatus.WHITE_WIN) {
+            lastWinnerDisplayName = gameSeatWhiteName == null || gameSeatWhiteName.isEmpty() ? "Brancas" : gameSeatWhiteName;
+        } else {
+            lastWinnerDisplayName = gameSeatBlackName == null || gameSeatBlackName.isEmpty() ? "Pretas" : gameSeatBlackName;
+        }
+        Component msg = announceOverride != null ? announceOverride
+                : (outcome == CheckersGameStatus.WHITE_WIN
+                        ? Component.literal("Branco venceu!")
+                        : Component.literal("Preto venceu!"));
         Vec3 center = Vec3.atCenterOf(worldPosition);
         double reach = 24.0;
         double reachSq = reach * reach;
@@ -217,6 +233,7 @@ public class CheckersBlockEntity extends BlockEntity {
         clearAnimation();
         clearGameSeats();
         lastWinnerDisplayName = "";
+        resetGameClock();
     }
 
     private void clearGameSeats() {
@@ -328,12 +345,56 @@ public class CheckersBlockEntity extends BlockEntity {
         } else if (!gameSeatWhiteUuid.equals(id) && gameSeatBlackUuid == null) {
             gameSeatBlackUuid = id;
             gameSeatBlackName = name;
+            resetGameClock();
             changed = true;
         }
         if (changed) {
             setChanged();
             syncToClients();
         }
+    }
+
+    private void resetGameClock() {
+        whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+        blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+    }
+
+    private boolean bothGameSeatsOccupied() {
+        return gameSeatWhiteUuid != null && gameSeatBlackUuid != null;
+    }
+
+    private void tickGameClock() {
+        if (gameStatus != CheckersGameStatus.PLAYING || !bothGameSeatsOccupied()) {
+            return;
+        }
+        if (hasActiveAnimation()) {
+            return;
+        }
+        if (whiteTurn) {
+            whiteClockTicks = Math.max(0, whiteClockTicks - 1);
+            if (whiteClockTicks <= 0) {
+                endGame(CheckersGameStatus.BLACK_WIN, Component.literal("Tempo das brancas esgotado! Pretas venceram."));
+                return;
+            }
+        } else {
+            blackClockTicks = Math.max(0, blackClockTicks - 1);
+            if (blackClockTicks <= 0) {
+                endGame(CheckersGameStatus.WHITE_WIN, Component.literal("Tempo das pretas esgotado! Brancas venceram."));
+                return;
+            }
+        }
+        if (level.getGameTime() % 20 == 0) {
+            setChanged();
+            syncToClients();
+        }
+    }
+
+    public int getWhiteClockTicks() {
+        return whiteClockTicks;
+    }
+
+    public int getBlackClockTicks() {
+        return blackClockTicks;
     }
 
     public CheckersGameStatus getGameStatus() {
@@ -645,6 +706,8 @@ public class CheckersBlockEntity extends BlockEntity {
         }
         tag.putString("GameSeatBlackName", gameSeatBlackName == null ? "" : gameSeatBlackName);
         tag.putString("LastWinnerName", lastWinnerDisplayName == null ? "" : lastWinnerDisplayName);
+        tag.putInt("ClockWhiteTicks", whiteClockTicks);
+        tag.putInt("ClockBlackTicks", blackClockTicks);
     }
 
     private void readCommonTag(CompoundTag tag) {
@@ -673,6 +736,8 @@ public class CheckersBlockEntity extends BlockEntity {
         gameSeatBlackUuid = tag.hasUUID("GameSeatBlack") ? tag.getUUID("GameSeatBlack") : null;
         gameSeatBlackName = tag.contains("GameSeatBlackName") ? tag.getString("GameSeatBlackName") : "";
         lastWinnerDisplayName = tag.contains("LastWinnerName") ? tag.getString("LastWinnerName") : "";
+        whiteClockTicks = tag.contains("ClockWhiteTicks") ? tag.getInt("ClockWhiteTicks") : BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+        blackClockTicks = tag.contains("ClockBlackTicks") ? tag.getInt("ClockBlackTicks") : BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
         if (tag.getBoolean("AnimActive")) {
             animFromRow = tag.getInt("AnimFromR");
             animFromCol = tag.getInt("AnimFromC");

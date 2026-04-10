@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.joml.Vector2d;
 import net.caduzz.tablecraft.block.ChessBlock;
 import net.caduzz.tablecraft.block.ChessMoveLogic;
+import net.caduzz.tablecraft.game.BoardGameClockConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -64,6 +65,8 @@ public class ChessBlockEntity extends BlockEntity {
     private UUID gameSeatBlackUuid;
     private String gameSeatBlackName = "";
     private String lastWinnerDisplayName = "";
+    private int whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+    private int blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
 
     /** Origem/destino vazios no tabuleiro até o fim da animação; a peça é desenhada só no cliente interpolando. */
     private int animFromRow;
@@ -88,6 +91,7 @@ public class ChessBlockEntity extends BlockEntity {
         if (level == null) {
             return;
         }
+        tickGameClock();
         if (hasActiveAnimation()) {
             if (level.getGameTime() >= animStartGameTime + (long) MOVE_DURATION_TICKS) {
                 finishAnimatedMove();
@@ -122,6 +126,7 @@ public class ChessBlockEntity extends BlockEntity {
         gameSeatBlackUuid = null;
         gameSeatBlackName = "";
         lastWinnerDisplayName = "";
+        resetGameClock();
         clearAnimation();
     }
 
@@ -269,6 +274,10 @@ public class ChessBlockEntity extends BlockEntity {
     }
 
     private void endGame(ChessGameStatus status) {
+        endGame(status, null);
+    }
+
+    private void endGame(ChessGameStatus status, @Nullable Component announceOverride) {
         gameStatus = status;
         resetAtGameTime = level == null ? -1L : level.getGameTime() + GAME_END_RESET_DELAY_TICKS;
         if (status == ChessGameStatus.WHITE_WIN) {
@@ -277,7 +286,8 @@ public class ChessBlockEntity extends BlockEntity {
             lastWinnerDisplayName = gameSeatBlackName == null || gameSeatBlackName.isEmpty() ? "Pretas" : gameSeatBlackName;
         }
         if (level != null) {
-            Component msg = Component.literal(status == ChessGameStatus.WHITE_WIN ? "Brancas venceram no xadrez!" : "Pretas venceram no xadrez!");
+            Component msg = announceOverride != null ? announceOverride
+                    : Component.literal(status == ChessGameStatus.WHITE_WIN ? "Brancas venceram no xadrez!" : "Pretas venceram no xadrez!");
             Vec3 center = Vec3.atCenterOf(worldPosition);
             for (Player p : level.players()) {
                 if (p.distanceToSqr(center) <= 24.0 * 24.0) {
@@ -319,7 +329,55 @@ public class ChessBlockEntity extends BlockEntity {
         if (!gameSeatWhiteUuid.equals(id) && gameSeatBlackUuid == null) {
             gameSeatBlackUuid = id;
             gameSeatBlackName = name;
+            resetGameClock();
         }
+    }
+
+    private void resetGameClock() {
+        whiteClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+        blackClockTicks = BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+    }
+
+    private boolean bothGameSeatsOccupied() {
+        return gameSeatWhiteUuid != null && gameSeatBlackUuid != null;
+    }
+
+    private void tickGameClock() {
+        if (gameStatus != ChessGameStatus.PLAYING || !bothGameSeatsOccupied()) {
+            return;
+        }
+        if (hasActiveAnimation()) {
+            return;
+        }
+        if (whiteTurn) {
+            whiteClockTicks = Math.max(0, whiteClockTicks - 1);
+            if (whiteClockTicks <= 0) {
+                endGame(ChessGameStatus.BLACK_WIN, Component.literal("Tempo das brancas esgotado! Pretas venceram."));
+                setChanged();
+                syncToClients();
+                return;
+            }
+        } else {
+            blackClockTicks = Math.max(0, blackClockTicks - 1);
+            if (blackClockTicks <= 0) {
+                endGame(ChessGameStatus.WHITE_WIN, Component.literal("Tempo das pretas esgotado! Brancas venceram."));
+                setChanged();
+                syncToClients();
+                return;
+            }
+        }
+        if (level.getGameTime() % 20 == 0) {
+            setChanged();
+            syncToClients();
+        }
+    }
+
+    public int getWhiteClockTicks() {
+        return whiteClockTicks;
+    }
+
+    public int getBlackClockTicks() {
+        return blackClockTicks;
     }
 
     private int[] hitToCell(BlockHitResult hit) {
@@ -524,6 +582,8 @@ public class ChessBlockEntity extends BlockEntity {
         }
         tag.putString("GameSeatBlackName", gameSeatBlackName == null ? "" : gameSeatBlackName);
         tag.putString("LastWinnerName", lastWinnerDisplayName == null ? "" : lastWinnerDisplayName);
+        tag.putInt("ClockWhiteTicks", whiteClockTicks);
+        tag.putInt("ClockBlackTicks", blackClockTicks);
         tag.putBoolean("AnimActive", hasActiveAnimation());
         if (hasActiveAnimation()) {
             tag.putInt("AnimFromR", animFromRow);
@@ -566,6 +626,8 @@ public class ChessBlockEntity extends BlockEntity {
         gameSeatBlackUuid = tag.hasUUID("GameSeatBlack") ? tag.getUUID("GameSeatBlack") : null;
         gameSeatBlackName = tag.contains("GameSeatBlackName") ? tag.getString("GameSeatBlackName") : "";
         lastWinnerDisplayName = tag.contains("LastWinnerName") ? tag.getString("LastWinnerName") : "";
+        whiteClockTicks = tag.contains("ClockWhiteTicks") ? tag.getInt("ClockWhiteTicks") : BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
+        blackClockTicks = tag.contains("ClockBlackTicks") ? tag.getInt("ClockBlackTicks") : BoardGameClockConfig.DEFAULT_PLAYER_TIME_TICKS;
         if (tag.getBoolean("AnimActive")) {
             animFromRow = tag.getInt("AnimFromR");
             animFromCol = tag.getInt("AnimFromC");

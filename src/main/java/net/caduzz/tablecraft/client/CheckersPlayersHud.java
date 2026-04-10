@@ -108,6 +108,12 @@ public final class CheckersPlayersHud {
                     gui.drawString(mc.font, whiteName, leftX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
                             BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
 
+                    boolean clockRuns = checkers.hasGameSeatWhite() && checkers.hasGameSeatBlack();
+                    int clockY = BoardPlayersHudMetrics.clockBaselineY(headY, mc);
+                    String whiteClock = clockRuns ? BoardGameHudFormat.formatClockTicks(checkers.getWhiteClockTicks()) : "—";
+                    int wcx = leftX + panelW - pad - mc.font.width(whiteClock);
+                    gui.drawString(mc.font, whiteClock, wcx, clockY, whiteTurn && clockRuns ? 0xFFFFCC66 : 0xFF999999, true);
+
                     // ===== PRETAS =====
                     gui.fill(rightX, y, rightX + panelW, y + panelH, 0xC0101010);
 
@@ -127,6 +133,10 @@ public final class CheckersPlayersHud {
                     String blackName = checkers.hasGameSeatBlack() ? checkers.getGameSeatBlackName() : "—";
                     gui.drawString(mc.font, blackName, rightX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
                             BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
+
+                    String blackClock = clockRuns ? BoardGameHudFormat.formatClockTicks(checkers.getBlackClockTicks()) : "—";
+                    int bcx = rightX + panelW - pad - mc.font.width(blackClock);
+                    gui.drawString(mc.font, blackClock, bcx, clockY, blackTurn && clockRuns ? 0xFFFFCC66 : 0xFF999999, true);
 
                     // ===== TEXTO CENTRAL =====
                     String turnText = checkers.isWhiteTurn() ? "Brancas jogam" : "Pretas jogam";

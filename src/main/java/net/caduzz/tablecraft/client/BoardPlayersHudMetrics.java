@@ -13,12 +13,16 @@ public final class BoardPlayersHudMetrics {
     public static final int NAME_GAP = 4;
     /** Espaço entre linha do título e topo da cabeça. */
     private static final int GAP_TITLE_TO_HEAD = 3;
-
     private BoardPlayersHudMetrics() {}
 
-    /** Altura justa: título + cabeça + margens. */
+    /** Altura: título + cabeça + margens (timer na mesma linha da foto). */
     public static int panelHeight(Minecraft mc) {
         return PAD + mc.font.lineHeight + GAP_TITLE_TO_HEAD + HEAD_SIZE + PAD;
+    }
+
+    /** Baseline do texto mm:ss na mesma linha vertical da cabeça. */
+    public static int clockBaselineY(int headTop, Minecraft mc) {
+        return nameBaselineY(headTop, mc);
     }
 
     /** Linha do título (Brancas / Pretas), abaixo do topo do painel. */

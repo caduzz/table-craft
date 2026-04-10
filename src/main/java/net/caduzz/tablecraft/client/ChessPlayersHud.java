@@ -108,6 +108,12 @@ public final class ChessPlayersHud {
                 gui.drawString(mc.font, whiteName, leftX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
                         BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
 
+                boolean clockRuns = chess.hasGameSeatWhite() && chess.hasGameSeatBlack();
+                int clockY = BoardPlayersHudMetrics.clockBaselineY(headY, mc);
+                String whiteClock = clockRuns ? BoardGameHudFormat.formatClockTicks(chess.getWhiteClockTicks()) : "—";
+                int wcx = leftX + panelW - pad - mc.font.width(whiteClock);
+                gui.drawString(mc.font, whiteClock, wcx, clockY, whiteTurn && clockRuns ? 0xFFFFCC66 : 0xFF999999, true);
+
                 // ===== PAINEL DIREITO (PRETAS) =====
                 gui.fill(rightX, y, rightX + panelW, y + panelH, 0xC0101010);
 
@@ -127,6 +133,10 @@ public final class ChessPlayersHud {
                 String blackName = chess.hasGameSeatBlack() ? chess.getGameSeatBlackName() : "—";
                 gui.drawString(mc.font, blackName, rightX + pad + BoardPlayersHudMetrics.HEAD_SIZE + BoardPlayersHudMetrics.NAME_GAP,
                         BoardPlayersHudMetrics.nameBaselineY(headY, mc), 0xE0E0E0, true);
+
+                String blackClock = clockRuns ? BoardGameHudFormat.formatClockTicks(chess.getBlackClockTicks()) : "—";
+                int bcx = rightX + panelW - pad - mc.font.width(blackClock);
+                gui.drawString(mc.font, blackClock, bcx, clockY, blackTurn && clockRuns ? 0xFFFFCC66 : 0xFF999999, true);
 
                 // ===== TEXTO CENTRAL =====
                 String turnText = chess.isWhiteTurn() ? "Brancas jogam" : "Pretas jogam";
