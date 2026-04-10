@@ -143,7 +143,7 @@ public final class CheckersBlockRenderer implements BlockEntityRenderer<Checkers
                 0, 1, 0);
         quad(consumer, mat, pose, light, cr, cg, cb, ca, minX, minY, minZ, minX, maxY, minZ, maxX, maxY, minZ, maxX, minY, minZ,
                 0, 0, -1);
-        quad(consumer, mat, pose, light, cr, cg, cb, ca, maxX, minY, minZ, maxX, maxY, minZ, maxX, maxY, maxZ, maxX, minY, maxZ,
+        quad(consumer, mat, pose, light, cr, cg, cb, ca, minX, minY, maxZ, minX, maxY, maxZ, maxX, maxY, maxZ, maxX, minY, maxZ,
                 0, 0, 1);
         quad(consumer, mat, pose, light, cr, cg, cb, ca, minX, minY, maxZ, minX, maxY, maxZ, minX, maxY, minZ, minX, minY, minZ,
                 -1, 0, 0);
