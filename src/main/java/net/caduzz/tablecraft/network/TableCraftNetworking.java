@@ -160,4 +160,5 @@ public final class TableCraftNetworking {
     public static void sendOnlineClear(OnlineTableClearPayload payload) {
         PacketDistributor.sendToServer(payload);
     }
+
 }

@@ -30,6 +30,32 @@ public final class TableSettingsPanelButton extends AbstractButton {
         action.run();
     }
 
+    /** Pinta o mesmo retângulo preenchido + contorno que os botões do menu (sem texto). */
+    public static void paintStyleRect(GuiGraphics g, int x, int y, int w, int h, Style style, boolean hover) {
+        int fill;
+        int border;
+        switch (style) {
+            case DANGER -> {
+                fill = hover ? 0xFF7a2a32 : 0xFF4a1820;
+                border = hover ? 0xFFc45a62 : 0xFF8a3038;
+            }
+            case PRIMARY -> {
+                fill = hover ? 0xFF3a6a4a : 0xFF284832;
+                border = hover ? 0xFF5cb88a : 0xFF3d8a62;
+            }
+            case COMPACT -> {
+                fill = hover ? 0xFF354555 : 0xFF252d38;
+                border = hover ? 0xFF6a7a8e : 0xFF4a5868;
+            }
+            default -> {
+                fill = hover ? 0xFF323c4e : 0xFF222830;
+                border = hover ? 0xFF5a6a82 : 0xFF3d4858;
+            }
+        }
+        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, fill);
+        g.renderOutline(x, y, w, h, border);
+    }
+
     @Override
     protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         int x = getX();
@@ -38,34 +64,15 @@ public final class TableSettingsPanelButton extends AbstractButton {
         int h = getHeight();
         boolean hover = isHovered();
 
-        int fill;
-        int border;
         int textColor;
         switch (style) {
-            case DANGER -> {
-                fill = hover ? 0xFF7a2a32 : 0xFF4a1820;
-                border = hover ? 0xFFc45a62 : 0xFF8a3038;
-                textColor = 0xFFFFF0F0;
-            }
-            case PRIMARY -> {
-                fill = hover ? 0xFF3a6a4a : 0xFF284832;
-                border = hover ? 0xFF5cb88a : 0xFF3d8a62;
-                textColor = 0xFFE8FFF0;
-            }
-            case COMPACT -> {
-                fill = hover ? 0xFF354555 : 0xFF252d38;
-                border = hover ? 0xFF6a7a8e : 0xFF4a5868;
-                textColor = 0xFFE0E8F0;
-            }
-            default -> {
-                fill = hover ? 0xFF323c4e : 0xFF222830;
-                border = hover ? 0xFF5a6a82 : 0xFF3d4858;
-                textColor = 0xFFE4ECF5;
-            }
+            case DANGER -> textColor = 0xFFFFF0F0;
+            case PRIMARY -> textColor = 0xFFE8FFF0;
+            case COMPACT -> textColor = 0xFFE0E8F0;
+            default -> textColor = 0xFFE4ECF5;
         }
 
-        g.fill(x + 1, y + 1, x + w - 1, y + h - 1, fill);
-        g.renderOutline(x, y, w, h, border);
+        paintStyleRect(g, x, y, w, h, style, hover);
         Font f = Minecraft.getInstance().font;
         int msgW = f.width(getMessage());
         int tx = x + (w - msgW) / 2;

@@ -36,6 +36,14 @@ public final class OnlineProfileCache {
         }
     }
 
+    /** Limpa só a partida ativa de xadrez (ex.: após fim na API), mantendo nome/rating em cache. */
+    public static void clearActiveChessBinding() {
+        synchronized (LOCK) {
+            activeChessMatchId = "";
+            activeChessYourSide = "";
+        }
+    }
+
     public static String getCachedDisplayName() {
         return cachedDisplayName;
     }

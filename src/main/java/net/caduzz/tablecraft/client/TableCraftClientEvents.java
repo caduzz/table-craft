@@ -2,6 +2,7 @@ package net.caduzz.tablecraft.client;
 
 import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.entity.ModBlockEntities;
+import net.caduzz.tablecraft.client.online.ChessMatchmakingApiCleanup;
 import net.caduzz.tablecraft.client.online.ClientPlayerRegistrationStore;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -18,6 +19,7 @@ public final class TableCraftClientEvents {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         ClientPlayerRegistrationStore.loadFromDisk();
+        ChessMatchmakingApiCleanup.installClientShutdownHook();
     }
 
     @SubscribeEvent

@@ -1,5 +1,6 @@
 package net.caduzz.tablecraft.client.online;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -14,7 +15,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * Autenticação assíncrona ao entrar no mundo: registo se necessário e validação {@code GET /me} para cache de rating.
+ * Autenticação assíncrona ao entrar no mundo: com sessão gravada faz {@code GET /me} para confirmar que a conta/sessão
+ * ainda existe; em 401/403/404, {@code ok:false}, ou UUID diferente do jogador local, invalida e volta a
+ * {@code POST /register} + {@code GET /me} (login automático).
  */
 public final class OnlineAuthCoordinator {
     private static final long MIN_INTERVAL_MS = 8000L;
@@ -49,18 +52,38 @@ public final class OnlineAuthCoordinator {
     }
 
     private static CompletableFuture<Void> runAuthChain(Minecraft mc, String base, Player player) {
+        if (!ClientPlayerRegistrationStore.storedSessionMatchesCurrentPlayer(player.getUUID())) {
+            ClientPlayerRegistrationStore.invalidateSession();
+        }
         if (SessionManager.hasSession()) {
             String sessionToken = SessionManager.getSessionId();
-            return GameApiClient.getMyProfile(base, sessionToken).thenAccept(prof -> mc.execute(() -> OnlineProfileCache.updateFromProfile(prof)))
-                    .exceptionallyCompose(ex -> {
-                        if (isUnauthorized(ex)) {
-                            ClientPlayerRegistrationStore.invalidateSession();
-                            return registerThenMe(mc, base, player, true);
-                        }
-                        return CompletableFuture.failedFuture(unpack(ex));
-                    });
+            return GameApiClient.getMyProfile(base, sessionToken).thenCompose(prof -> {
+                if (!profileMatchesLocalPlayer(prof, player)) {
+                    ClientPlayerRegistrationStore.invalidateSession();
+                    return registerThenMe(mc, base, player, true);
+                }
+                mc.execute(() -> OnlineProfileCache.updateFromProfile(prof));
+                return CompletableFuture.completedFuture(null);
+            }).exceptionallyCompose(ex -> {
+                if (shouldReRegisterAfterProfileFailure(ex)) {
+                    ClientPlayerRegistrationStore.invalidateSession();
+                    return registerThenMe(mc, base, player, true);
+                }
+                return CompletableFuture.failedFuture(unpack(ex));
+            });
         }
         return registerThenMe(mc, base, player, false);
+    }
+
+    private static boolean profileMatchesLocalPlayer(@javax.annotation.Nullable PlayerProfileDTO prof, Player player) {
+        if (prof == null || prof.playerUuid() == null || prof.playerUuid().isBlank()) {
+            return true;
+        }
+        try {
+            return UUID.fromString(prof.playerUuid().trim()).equals(player.getUUID());
+        } catch (IllegalArgumentException ignored) {
+            return true;
+        }
     }
 
     private static CompletableFuture<Void> registerThenMe(Minecraft mc, String base, Player player, boolean afterInvalidSession) {
@@ -77,11 +100,14 @@ public final class OnlineAuthCoordinator {
         }));
     }
 
-    private static boolean isUnauthorized(Throwable t) {
+    /**
+     * Sessão ou conta inválida na API: novo {@code POST /register} + {@code GET /me}.
+     */
+    private static boolean shouldReRegisterAfterProfileFailure(Throwable t) {
         for (Throwable c = unpack(t); c != null; c = c.getCause()) {
             if (c instanceof GameApiException ge) {
                 int code = ge.httpStatus();
-                if (code == 401 || code == 403) {
+                if (code == 401 || code == 403 || code == 404) {
                     return true;
                 }
             }

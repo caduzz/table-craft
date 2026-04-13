@@ -16,6 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -37,6 +38,10 @@ import net.caduzz.tablecraft.block.entity.ChessBlockEntity.Piece;
  * Na fila: {@code {"ok":true,"queued":true}} — voltar a fazer POST (poll) até haver par.<br>
  * Partida: {@code {"ok":true,"matchId":"...","side":"WHITE"|"BLACK"}}
  *
+ * <h2>DELETE {base}/tablecraft/v1/chess/matchmaking</h2>
+ * Header: {@code X-TableCraft-Session: <sessionId>}<br>
+ * Sair da fila: {@code {"ok":true,"wasInQueue":true|false}}
+ *
  * <h2>GET {base}/tablecraft/v1/chess/matches/{matchId}/state</h2>
  * Header: {@code X-TableCraft-Session: <sessionId>}<br>
  * Response (preferido): {@code {"board":[64 ints],"whiteTurn":true,"status":"PLAYING"|"FINISHED"|"WHITE_WIN"|"BLACK_WIN",
@@ -53,7 +58,21 @@ import net.caduzz.tablecraft.block.entity.ChessBlockEntity.Piece;
  *
  * <h2>POST {base}/tablecraft/v1/chess/matches/{matchId}/move</h2>
  * Body: {@code {"fromRow":0..7,"fromCol":0..7,"toRow":0..7,"toCol":0..7}} na grelha da API (rate limited).<br>
- * Response: mesmo formato que /state.
+ * Response: mesmo formato que /state (incl. {@code MoveAppliedResponseDto}: {@code status} ACTIVE|FINISHED, {@code finished},
+ * {@code result}, {@code winnerSide}, {@code turn}).
+ *
+ * <h2>DELETE {base}/tablecraft/v1/checkers/matchmaking</h2>
+ * Igual ao de xadrez; header {@code X-TableCraft-Session}.
+ *
+ * <h2>GET {base}/tablecraft/v1/matches/live</h2>
+ * Sem sessão: {@code {"ok":true,"matches":[{matchId, gameType, turn, white:{uuid,displayName}, black:…}]}}.
+ *
+ * <h2>GET {base}/tablecraft/v1/matches/{matchId}</h2>
+ * Sem sessão: {@code ok}, {@code matchId}, {@code gameType}, {@code status}, {@code turn}, {@code state}, jogadores.
+ *
+ * <h2>POST/DELETE …/chess|checkers/matches/{matchId}/draw-offer</h2>
+ * <h2>POST …/draw-response</h2> corpo {@code {"accept":boolean}}
+ * <h2>POST …/resign</h2> sem corpo — resposta como move (estado + terminado).
  *
  * <h2>GET {base}/tablecraft/v1/me</h2>
  * Header: {@code X-TableCraft-Session}<br>
@@ -97,6 +116,82 @@ public final class GameApiClient {
         return matchmakingPoll(baseUrl, sessionId, "chess");
     }
 
+    /**
+     * Remove a sessão da fila de matchmaking de xadrez na API (não cancela partida já emparelhada).
+     *
+     * @return {@code wasInQueue} conforme a API; se o campo faltar, assume-se {@code false}.
+     */
+    public static CompletableFuture<MatchmakingCancelResult> cancelChessMatchmaking(String baseUrl, String sessionId) {
+        String url = baseUrl + "/tablecraft/v1/chess/matchmaking";
+        return sendJson("DELETE", url, sessionId, null).thenApply(GameApiClient::parseMatchmakingCancel);
+    }
+
+    public static CompletableFuture<MatchmakingCancelResult> cancelCheckersMatchmaking(String baseUrl, String sessionId) {
+        String url = baseUrl + "/tablecraft/v1/checkers/matchmaking";
+        return sendJson("DELETE", url, sessionId, null).thenApply(GameApiClient::parseMatchmakingCancel);
+    }
+
+    /** {@code GET /matches/live} — sem cabeçalho de sessão. */
+    public static CompletableFuture<MatchCatalogDtos.LiveMatchesResponse> getLiveMatches(String baseUrl) {
+        String url = baseUrl + "/tablecraft/v1/matches/live";
+        return sendJson("GET", url, null, null).thenApply(GameApiClient::parseLiveMatchesResponse);
+    }
+
+    /** {@code GET /matches/:matchId} — sem cabeçalho de sessão. */
+    public static CompletableFuture<MatchCatalogDtos.MatchDetailInfo> getMatchDetail(String baseUrl, String matchId) {
+        String url = baseUrl + "/tablecraft/v1/matches/" + encode(matchId);
+        return sendJson("GET", url, null, null).thenApply(GameApiClient::parseMatchDetail);
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> postChessDrawOffer(String baseUrl, String sessionId, String matchId) {
+        return sendJson("POST", chessMatchSuffixUrl(baseUrl, matchId, "draw-offer"), sessionId, "{}").thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> deleteChessDrawOffer(String baseUrl, String sessionId, String matchId) {
+        return sendJson("DELETE", chessMatchSuffixUrl(baseUrl, matchId, "draw-offer"), sessionId, null).thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> postChessDrawResponse(String baseUrl, String sessionId, String matchId, boolean accept) {
+        JsonObject body = new JsonObject();
+        body.addProperty("accept", accept);
+        return sendJson("POST", chessMatchSuffixUrl(baseUrl, matchId, "draw-response"), sessionId, body.toString()).thenApply(
+                json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> postChessResign(String baseUrl, String sessionId, String matchId) {
+        return sendJson("POST", chessMatchSuffixUrl(baseUrl, matchId, "resign"), sessionId, null).thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> postCheckersDrawOffer(String baseUrl, String sessionId, String matchId) {
+        return sendJson("POST", checkersMatchSuffixUrl(baseUrl, matchId, "draw-offer"), sessionId, "{}").thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> deleteCheckersDrawOffer(String baseUrl, String sessionId, String matchId) {
+        return sendJson("DELETE", checkersMatchSuffixUrl(baseUrl, matchId, "draw-offer"), sessionId, null).thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> postCheckersDrawResponse(String baseUrl, String sessionId, String matchId, boolean accept) {
+        JsonObject body = new JsonObject();
+        body.addProperty("accept", accept);
+        return sendJson("POST", checkersMatchSuffixUrl(baseUrl, matchId, "draw-response"), sessionId, body.toString()).thenApply(
+                json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    public static CompletableFuture<ChessApiSnapshot> postCheckersResign(String baseUrl, String sessionId, String matchId) {
+        return sendJson("POST", checkersMatchSuffixUrl(baseUrl, matchId, "resign"), sessionId, null).thenApply(json -> parseChessStateWithMeta(json).snapshot());
+    }
+
+    private static String chessMatchSuffixUrl(String baseUrl, String matchId, String suffix) {
+        return baseUrl + "/tablecraft/v1/chess/matches/" + encode(matchId) + "/" + suffix;
+    }
+
+    private static String checkersMatchSuffixUrl(String baseUrl, String matchId, String suffix) {
+        return baseUrl + "/tablecraft/v1/checkers/matches/" + encode(matchId) + "/" + suffix;
+    }
+
+    public record MatchmakingCancelResult(boolean ok, boolean wasInQueue) {
+    }
+
     private static CompletableFuture<MatchmakingPollResult> matchmakingPoll(String baseUrl, String sessionId, String game) {
         return sendJson("POST", baseUrl + "/tablecraft/v1/" + game + "/matchmaking", sessionId, "{}").thenApply(GameApiClient::parseMatchmakingPoll);
     }
@@ -129,6 +224,15 @@ public final class GameApiClient {
             return MatchmakingPollResult.stillQueued();
         }
         throw new GameApiException("matchmaking unexpected response: " + truncate(resp));
+    }
+
+    private static MatchmakingCancelResult parseMatchmakingCancel(String resp) {
+        JsonObject o = parseObject(resp);
+        if (!o.has("ok") || !o.get("ok").getAsBoolean()) {
+            throw new GameApiException("matchmaking cancel rejected: " + truncate(resp));
+        }
+        boolean wasInQueue = o.has("wasInQueue") && !o.get("wasInQueue").isJsonNull() && o.get("wasInQueue").getAsBoolean();
+        return new MatchmakingCancelResult(true, wasInQueue);
     }
 
     public static CompletableFuture<ChessApiSnapshot> getChessState(String baseUrl, String sessionId, String matchId) {
@@ -168,7 +272,8 @@ public final class GameApiClient {
         JsonObject root = parseObject(resp);
         boolean ok = root.has("ok") && root.get("ok").getAsBoolean();
         if (!ok) {
-            throw new GameApiException("me rejected: " + truncate(resp));
+            // Corpo {@code ok:false}: o cliente trata como sessão inválida e volta a {@code POST /register}.
+            throw new GameApiException("me rejected: " + truncate(resp), 401);
         }
         JsonObject src = root;
         if (root.has("data") && root.get("data").isJsonObject()) {
@@ -385,6 +490,10 @@ public final class GameApiClient {
     }
 
     private static String resolveStatusKey(JsonObject primary, JsonObject root) {
+        String contract = finishedContractStatusFromRoot(root);
+        if (contract != null) {
+            return contract;
+        }
         String k = deriveGameStatusKey(primary);
         if (!"PLAYING".equals(k)) {
             return k;
@@ -404,10 +513,55 @@ public final class GameApiClient {
         return "PLAYING";
     }
 
+    /**
+     * Contrato {@code MoveAppliedResponseDto} no envelope JSON (ex.: {@code status}, {@code finished}, {@code result}).
+     *
+     * @return {@code null} se o envelope não especificar estado de partida nesse formato
+     */
+    @javax.annotation.Nullable
+    private static String finishedContractStatusFromRoot(JsonObject root) {
+        if (root.has("status") && !root.get("status").isJsonNull()) {
+            String st = root.get("status").getAsString().trim();
+            if ("ACTIVE".equalsIgnoreCase(st)) {
+                return "PLAYING";
+            }
+            if ("FINISHED".equalsIgnoreCase(st)) {
+                return finishedOutcomeFromRoot(root);
+            }
+        }
+        if (root.has("finished") && !root.get("finished").isJsonNull() && root.get("finished").getAsBoolean()) {
+            return finishedOutcomeFromRoot(root);
+        }
+        return null;
+    }
+
+    private static String finishedOutcomeFromRoot(JsonObject root) {
+        if (root.has("result") && !root.get("result").isJsonNull() && root.get("result").isJsonPrimitive()
+                && root.get("result").getAsJsonPrimitive().isString()) {
+            String n = normalizeFinishedResult(root.get("result").getAsString());
+            if (!"PLAYING".equals(n)) {
+                return n;
+            }
+        }
+        if (root.has("winnerSide") && !root.get("winnerSide").isJsonNull() && root.get("winnerSide").isJsonPrimitive()) {
+            String w = root.get("winnerSide").getAsString().trim();
+            if (w.equalsIgnoreCase("WHITE")) {
+                return "WHITE_WIN";
+            }
+            if (w.equalsIgnoreCase("BLACK")) {
+                return "BLACK_WIN";
+            }
+        }
+        return "DRAW";
+    }
+
     private static String deriveGameStatusKey(JsonObject o) {
         String status = "PLAYING";
         if (o.has("status") && !o.get("status").isJsonNull()) {
             status = o.get("status").getAsString().trim();
+        }
+        if ("ACTIVE".equalsIgnoreCase(status)) {
+            return "PLAYING";
         }
         if ("FINISHED".equalsIgnoreCase(status)) {
             String k = finishedResultToKey(o);
@@ -539,6 +693,10 @@ public final class GameApiClient {
             rb.header("Cache-Control", "no-cache, no-store");
             rb.header("Pragma", "no-cache");
             rb.GET();
+        } else if ("DELETE".equals(method) && (bodyOrNull == null || bodyOrNull.isEmpty())) {
+            rb.header("Cache-Control", "no-cache, no-store");
+            rb.header("Pragma", "no-cache");
+            rb.method("DELETE", HttpRequest.BodyPublishers.noBody());
         } else {
             rb.header("Content-Type", "application/json; charset=UTF-8");
             rb.method(method, bodyOrNull == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(bodyOrNull));
@@ -671,6 +829,17 @@ public final class GameApiClient {
         return new ChessReplayResult(boardToOrdinals(board), whiteToMove, lfr, lfc, ltr, ltc);
     }
 
+    private static boolean parseWhiteTurnFromState(JsonObject o, JsonObject root) {
+        if (o.has("whiteTurn") && !o.get("whiteTurn").isJsonNull()) {
+            return o.get("whiteTurn").getAsBoolean();
+        }
+        String turn = firstNonBlank(optString(o, "turn"), optString(root, "turn"));
+        if (!turn.isEmpty()) {
+            return !normalizeChessSideLabel(turn).equals("BLACK");
+        }
+        return true;
+    }
+
     private static ChessStateWithMeta parseChessStateWithMeta(String json) {
         JsonObject root = parseObject(json);
         JsonObject o = unwrapChessState(root);
@@ -680,7 +849,7 @@ public final class GameApiClient {
 
         if (o.has("board") && o.get("board").isJsonArray() && o.getAsJsonArray("board").size() == 64) {
             board = mapApiBoardFlatToMod(readBoard64(o));
-            wt = o.has("whiteTurn") && o.get("whiteTurn").getAsBoolean();
+            wt = parseWhiteTurnFromState(o, root);
             if (o.has("lastMove") && o.get("lastMove").isJsonObject()) {
                 JsonObject lm = o.getAsJsonObject("lastMove");
                 if (lm.has("fromRow")) {
@@ -694,12 +863,21 @@ public final class GameApiClient {
             JsonArray ma = o.getAsJsonArray("moves");
             if (ma.isEmpty()) {
                 board = boardToOrdinals(newStandardChessBoard());
-                wt = o.has("whiteTurn") ? o.get("whiteTurn").getAsBoolean() : true;
+                wt = parseWhiteTurnFromState(o, root);
             } else {
                 TableCraft.LOGGER.debug("API chess state: tabuleiro a partir de {} move(s) (sem board[64])", ma.size());
                 ChessReplayResult rep = replayChessMoves(ma);
                 board = rep.flatBoard();
-                wt = o.has("whiteTurn") ? o.get("whiteTurn").getAsBoolean() : rep.whiteToMoveNext();
+                if (o.has("whiteTurn") && !o.get("whiteTurn").isJsonNull()) {
+                    wt = o.get("whiteTurn").getAsBoolean();
+                } else {
+                    String turn = firstNonBlank(optString(o, "turn"), optString(root, "turn"));
+                    if (!turn.isEmpty()) {
+                        wt = !normalizeChessSideLabel(turn).equals("BLACK");
+                    } else {
+                        wt = rep.whiteToMoveNext();
+                    }
+                }
                 lfr = rep.lfr();
                 lfc = rep.lfc();
                 ltr = rep.ltr();
@@ -756,7 +934,8 @@ public final class GameApiClient {
                 optString(o, "whiteDisplayName"),
                 optString(o, "whiteName"),
                 optString(o, "whitePlayerName"),
-                optString(root, "whiteDisplayName"));
+                optString(root, "whiteDisplayName"),
+                catalogPlayerDisplayName(root, "whitePlayer"));
         if (!w.isEmpty()) {
             return w;
         }
@@ -787,7 +966,8 @@ public final class GameApiClient {
                 optString(o, "blackDisplayName"),
                 optString(o, "blackName"),
                 optString(o, "blackPlayerName"),
-                optString(root, "blackDisplayName"));
+                optString(root, "blackDisplayName"),
+                catalogPlayerDisplayName(root, "blackPlayer"));
         if (!b.isEmpty()) {
             return b;
         }
@@ -811,6 +991,78 @@ public final class GameApiClient {
             }
         }
         return "";
+    }
+
+    private static String catalogPlayerDisplayName(JsonObject root, String key) {
+        if (!root.has(key) || !root.get(key).isJsonObject()) {
+            return "";
+        }
+        JsonObject p = root.getAsJsonObject(key);
+        return firstNonBlank(optString(p, "displayName"), optString(p, "name"), optString(p, "username"));
+    }
+
+    private static MatchCatalogDtos.LiveMatchesResponse parseLiveMatchesResponse(String resp) {
+        JsonObject root = parseObject(resp);
+        if (!root.has("ok") || !root.get("ok").getAsBoolean()) {
+            throw new GameApiException("live matches rejected: " + truncate(resp));
+        }
+        if (!root.has("matches") || !root.get("matches").isJsonArray()) {
+            return new MatchCatalogDtos.LiveMatchesResponse(true, List.of());
+        }
+        JsonArray arr = root.getAsJsonArray("matches");
+        List<MatchCatalogDtos.LiveMatchSummary> list = new ArrayList<>(arr.size());
+        for (int i = 0; i < arr.size(); i++) {
+            if (!arr.get(i).isJsonObject()) {
+                continue;
+            }
+            JsonObject m = arr.get(i).getAsJsonObject();
+            String mid = optString(m, "matchId");
+            if (mid.isEmpty()) {
+                continue;
+            }
+            list.add(new MatchCatalogDtos.LiveMatchSummary(
+                    mid,
+                    optString(m, "gameType"),
+                    optString(m, "turn"),
+                    parseCatalogPlayerNullable(m.get("white")),
+                    parseCatalogPlayerNullable(m.get("black"))));
+        }
+        return new MatchCatalogDtos.LiveMatchesResponse(true, Collections.unmodifiableList(list));
+    }
+
+    private static MatchCatalogDtos.MatchDetailInfo parseMatchDetail(String resp) {
+        JsonObject root = parseObject(resp);
+        if (!root.has("ok") || !root.get("ok").getAsBoolean()) {
+            throw new GameApiException("match detail rejected: " + truncate(resp));
+        }
+        return new MatchCatalogDtos.MatchDetailInfo(
+                true,
+                optString(root, "matchId"),
+                optString(root, "gameType"),
+                optString(root, "status"),
+                optString(root, "turn"),
+                parseCatalogPlayerNullable(root.get("whitePlayer")),
+                parseCatalogPlayerNullable(root.get("blackPlayer")));
+    }
+
+    @javax.annotation.Nullable
+    private static MatchCatalogDtos.CatalogPlayer parseCatalogPlayerNullable(JsonElement el) {
+        if (el == null || el.isJsonNull() || !el.isJsonObject()) {
+            return null;
+        }
+        JsonObject o = el.getAsJsonObject();
+        String uuid = null;
+        if (o.has("uuid") && !o.get("uuid").isJsonNull()) {
+            String u = o.get("uuid").getAsString().trim();
+            if (!u.isEmpty()) {
+                uuid = u;
+            }
+        }
+        String name = firstNonBlank(optString(o, "displayName"), optString(o, "name"));
+        if (uuid == null && name.isBlank()) {
+            return null;
+        }
+        return new MatchCatalogDtos.CatalogPlayer(uuid, name.isBlank() ? "?" : name);
     }
 
     private static String truncate(String s) {

@@ -12,11 +12,11 @@
       "projectName": "table-craft",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\clientRunProgramArgs.txt"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\clientRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\clientRunVmArgs.txt",
-        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table\\table-craft\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -34,11 +34,11 @@
       "projectName": "table-craft",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client1RunProgramArgs.txt"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\client1RunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client1RunVmArgs.txt",
-        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\client1RunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table\\table-craft\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run\\client1",
       "env": {},
@@ -56,11 +56,11 @@
       "projectName": "table-craft",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client2RunProgramArgs.txt"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\client2RunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\client2RunVmArgs.txt",
-        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\client2RunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table\\table-craft\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run\\client2",
       "env": {},
@@ -78,11 +78,11 @@
       "projectName": "table-craft",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\dataRunProgramArgs.txt"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\dataRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\dataRunVmArgs.txt",
-        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\dataRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table\\table-craft\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -100,11 +100,11 @@
       "projectName": "table-craft",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\gameTestServerRunProgramArgs.txt"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\gameTestServerRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\gameTestServerRunVmArgs.txt",
-        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\gameTestServerRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table\\table-craft\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},
@@ -122,11 +122,11 @@
       "projectName": "table-craft",
       "mainClass": "net.neoforged.devlaunch.Main",
       "args": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\serverRunProgramArgs.txt"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\serverRunProgramArgs.txt"
       ],
       "vmArgs": [
-        "@D:\\arquivos\\minecraft\\table-craft\\build\\moddev\\serverRunVmArgs.txt",
-        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table-craft\\bin\\main"
+        "@D:\\arquivos\\minecraft\\table\\table-craft\\build\\moddev\\serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dtablecraft%%D:\\arquivos\\minecraft\\table\\table-craft\\bin\\main"
       ],
       "cwd": "${workspaceFolder}\\run",
       "env": {},

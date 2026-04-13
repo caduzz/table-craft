@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
+import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.config.TableCraftConfig;
 import net.caduzz.tablecraft.online.api.ChessApiSnapshot;
 import net.caduzz.tablecraft.online.api.GameApiClient;
@@ -69,6 +70,15 @@ public final class ChessMatchmakingManager {
         awaitingReauthRetry = false;
         statusLine = Component.literal("Cancelado.");
         onUiRefresh.run();
+        if (SessionManager.hasSession()) {
+            String base = TableCraftConfig.apiBaseUrl();
+            String sessionToken = SessionManager.getSessionId();
+            GameApiClient.cancelChessMatchmaking(base, sessionToken).whenComplete((res, ex) -> {
+                if (ex != null) {
+                    TableCraft.LOGGER.warn("Cancelar fila de matchmaking (API): {}", rootMsg(ex));
+                }
+            });
+        }
     }
 
     /**
@@ -156,6 +166,7 @@ public final class ChessMatchmakingManager {
                 return;
             }
             if (!isChessMatchInProgress(meta.snapshot())) {
+                ClientOnlineChessAfterMatch.clearCachedBindingsIfSnapshotEnded(currentMatchId, meta.snapshot());
                 pollOnce(token, allowSilentReRegister);
                 return;
             }

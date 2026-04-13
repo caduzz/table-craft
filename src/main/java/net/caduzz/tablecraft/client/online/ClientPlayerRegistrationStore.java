@@ -56,6 +56,21 @@ public final class ClientPlayerRegistrationStore {
         return cached.sessionId == null ? "" : cached.sessionId;
     }
 
+    /**
+     * {@code false} se existir sessão gravada para outro {@link UUID} (ex.: mudou de conta no launcher).
+     */
+    public static boolean storedSessionMatchesCurrentPlayer(UUID playerUuid) {
+        synchronized (LOCK) {
+            if (!cached.registered || cached.sessionId == null || cached.sessionId.isEmpty()) {
+                return true;
+            }
+            if (cached.playerUuid == null || cached.playerUuid.isBlank()) {
+                return true;
+            }
+            return cached.playerUuid.equalsIgnoreCase(playerUuid.toString());
+        }
+    }
+
     public static void saveRegistered(String sessionId, UUID playerUuid) {
         synchronized (LOCK) {
             String keepMatch = cached.lastChessMatchId != null && !cached.lastChessMatchId.isEmpty() ? cached.lastChessMatchId : "";

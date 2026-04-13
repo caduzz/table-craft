@@ -2,9 +2,11 @@ package net.caduzz.tablecraft.block.entity;
 
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.joml.Vector2d;
 import net.caduzz.tablecraft.block.ChessBlock;
 import net.caduzz.tablecraft.block.ChessMoveLogic;
+import net.caduzz.tablecraft.client.online.ClientOnlineChessAfterMatch;
 import net.caduzz.tablecraft.config.TableCraftConfig;
 import net.caduzz.tablecraft.game.BoardGameClockConfig;
 import net.caduzz.tablecraft.online.OnlineSide;
@@ -1484,6 +1486,10 @@ public class ChessBlockEntity extends BlockEntity {
             onlineCapturedBlack = 0;
             onlineHudWhiteName = "";
             onlineHudBlackName = "";
+        }
+        if (level != null && level.isClientSide() && tablePlayMode == TablePlayMode.ONLINE && gameStatus != ChessGameStatus.PLAYING
+                && onlineMatchId != null && !onlineMatchId.isEmpty()) {
+            ClientOnlineChessAfterMatch.clearCachedBindingsIfSameMatch(onlineMatchId);
         }
     }
 }

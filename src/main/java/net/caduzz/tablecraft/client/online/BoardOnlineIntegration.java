@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
 
+import net.caduzz.tablecraft.TableCraft;
 import net.caduzz.tablecraft.block.ModBlocks;
 import net.caduzz.tablecraft.block.entity.ChessBlockEntity;
 import net.caduzz.tablecraft.config.TableCraftConfig;
@@ -136,17 +137,34 @@ public final class BoardOnlineIntegration {
         if (mc.level == null) {
             return;
         }
+        boolean wasMatchmaking = busy;
         TableCraftNetworking.sendOnlineClear(new OnlineTableClearPayload(boardPos, OnlineTableBindPayload.GAME_CHESS));
         ClientPendingOnlineMatch.clear();
         matchmakingToken++;
         busy = false;
         statusLine.set(Component.literal("Pedido para desligar online desta mesa enviado."));
+        notifyApiLeaveQueueIfNeeded(wasMatchmaking);
     }
 
     /** Chamar ao fechar o menu para cancelar polls pendentes. */
     public void cancelMatchmakingIfLeaving() {
+        boolean wasMatchmaking = busy;
         matchmakingToken++;
         busy = false;
+        notifyApiLeaveQueueIfNeeded(wasMatchmaking);
+    }
+
+    private void notifyApiLeaveQueueIfNeeded(boolean wasMatchmaking) {
+        if (!wasMatchmaking || !ClientPlayerRegistrationStore.isRegistered()) {
+            return;
+        }
+        String base = TableCraftConfig.apiBaseUrl();
+        String sid = ClientPlayerRegistrationStore.getSessionId();
+        GameApiClient.cancelChessMatchmaking(base, sid).whenComplete((res, ex) -> {
+            if (ex != null) {
+                TableCraft.LOGGER.warn("Cancelar fila de matchmaking (API): {}", rootMsg(ex));
+            }
+        });
     }
 
     /**
@@ -179,6 +197,7 @@ public final class BoardOnlineIntegration {
                 return;
             }
             statusLine.set(Component.literal(local + describeApiSnapshot(mid, snap)));
+            ClientOnlineChessAfterMatch.clearCachedBindingsIfSnapshotEnded(mid, snap);
         }));
     }
 
